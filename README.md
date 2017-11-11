@@ -171,3 +171,10 @@ year = {2017}
 - 2016-NOV-18: updated to reflect changes to team and project structure
 - 2015-JUL-10: updated dependencies, added reference to ISMAR paper
 - 2014-OCT-06: initial public release
+
+
+### Additions to the repo
+
+We intend to use the repo as a base. The goal is to implement the Dynamic Fusion algorithm and possibly the VolumeDeform algorithm to perform 3D reconstruction of Non-rigidly deforming scenes. 
+
+Deadline : December 15, 2017 
