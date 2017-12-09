@@ -184,6 +184,7 @@ void ITMExtendedTracker::SetEvaluationData(ITMTrackingState *trackingState, cons
 	// Pointclouds are needed only when the depth tracker is enabled
 	if (useDepth)
 	{
+		printf("Setting sceneHierarchy - points and normals\n");
 		sceneHierarchy->GetLevel(0)->intrinsics = view->calib.intrinsics_d.projectionParamsSimple.all;
 		sceneHierarchy->GetLevel(0)->pointsMap = trackingState->pointCloud->locations;
 		sceneHierarchy->GetLevel(0)->normalsMap = trackingState->pointCloud->colours;
@@ -409,6 +410,7 @@ void ITMExtendedTracker::UpdatePoseQuality(int noValidPoints_old, float *hessian
 
 void ITMExtendedTracker::TrackCamera(ITMTrackingState *trackingState, const ITMView *view)
 {
+	printf("Inside Extended Tracker \n");
 	if (trackingState->age_pointCloud >= 0) trackingState->framesProcessed++;
 	else trackingState->framesProcessed = 0;
 
@@ -523,6 +525,7 @@ void ITMExtendedTracker::TrackCamera(ITMTrackingState *trackingState, const ITMV
 			}
 			else if (useDepth)
 			{
+				printf("Inside Track Camera::Depth \n");
 				noValidPoints_new = noValidPoints_depth;
 				f_new = f_depth;
 				memcpy(nabla_new, nabla_depth, sizeof(nabla_depth));
@@ -530,6 +533,7 @@ void ITMExtendedTracker::TrackCamera(ITMTrackingState *trackingState, const ITMV
 			}
 			else if (useColour)
 			{
+				
 				noValidPoints_new = noValidPoints_RGB;
 				f_new = f_RGB;
 				memcpy(nabla_new, nabla_RGB, sizeof(nabla_RGB));

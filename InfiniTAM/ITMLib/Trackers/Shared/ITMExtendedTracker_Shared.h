@@ -71,6 +71,9 @@ _CPU_AND_GPU_CODE_ inline bool computePerPointGH_exDepth_Ab(THREADPTR(float) *A,
 	const CONSTPTR(Vector4f) & sceneIntrinsics, const CONSTPTR(Matrix4f) & approxInvPose, const CONSTPTR(Matrix4f) & scenePose, const CONSTPTR(Vector4f) *pointsMap,
 	const CONSTPTR(Vector4f) *normalsMap, float spaceThresh, float viewFrustum_min, float viewFrustum_max, float tukeyCutOff, int framesToSkip, int framesToWeight)
 {
+	// printf("computePerPointGH_exDepth_Ab \n");
+
+	//Calculates J^T (deltax)
 	depthWeight = 0;
 
 	if (depth <= 1e-8f) return false; //check if valid -- != 0.0f
@@ -78,6 +81,10 @@ _CPU_AND_GPU_CODE_ inline bool computePerPointGH_exDepth_Ab(THREADPTR(float) *A,
 	Vector4f tmp3Dpoint, tmp3Dpoint_reproj; Vector3f ptDiff;
 	Vector4f curr3Dpoint, corr3Dnormal; Vector2f tmp2Dpoint;
 
+	// z K^(-1)[ u v 1]
+	//Intrinsics 
+	// z = px , w = py, x = fx, y = fy
+	//unproject 
 	tmp3Dpoint.x = depth * ((float(x) - viewIntrinsics.z) / viewIntrinsics.x);
 	tmp3Dpoint.y = depth * ((float(y) - viewIntrinsics.w) / viewIntrinsics.y);
 	tmp3Dpoint.z = depth;
@@ -104,6 +111,7 @@ _CPU_AND_GPU_CODE_ inline bool computePerPointGH_exDepth_Ab(THREADPTR(float) *A,
 	ptDiff.z = curr3Dpoint.z - tmp3Dpoint.z;
 	float dist = ptDiff.x * ptDiff.x + ptDiff.y * ptDiff.y + ptDiff.z * ptDiff.z;
 
+	//Do not consider outliers in the pose estimation - how to handle in warp field estimation 
 	if (dist > tukeyCutOff * spaceThresh) return false;
 
 	corr3Dnormal = interpolateBilinear_withHoles(normalsMap, tmp2Dpoint, sceneImageSize);
@@ -118,13 +126,17 @@ _CPU_AND_GPU_CODE_ inline bool computePerPointGH_exDepth_Ab(THREADPTR(float) *A,
 		depthWeight *= (curr3Dpoint.w - framesToSkip) / framesToWeight;
 	}
 
+	//delta_x 
 	b = corr3Dnormal.x * ptDiff.x + corr3Dnormal.y * ptDiff.y + corr3Dnormal.z * ptDiff.z;
 
 	// TODO check whether normal matches normal from image, done in the original paper, but does not seem to be required
+	//Another way to reject outliers? Comparing normals 
+
 	if (shortIteration)
 	{
 		if (rotationOnly)
 		{
+			//looks like a cross product 
 			A[0] = +tmp3Dpoint.z * corr3Dnormal.y - tmp3Dpoint.y * corr3Dnormal.z;
 			A[1] = -tmp3Dpoint.z * corr3Dnormal.x + tmp3Dpoint.x * corr3Dnormal.z;
 			A[2] = +tmp3Dpoint.y * corr3Dnormal.x - tmp3Dpoint.x * corr3Dnormal.y;
@@ -166,6 +178,8 @@ _CPU_AND_GPU_CODE_ inline bool computePerPointGH_exRGB_inv_Ab(
 		float tukeyCutoff
 		)
 {
+
+
 	// Before invoking this method, projectPoint_exRGB is invoked to compute the intensity
 	// associated to each depth pixel. Intensities_curr is not the "input" intensity image
 	// but the output of such caching. Its size is therefore the same as imgSize_depth

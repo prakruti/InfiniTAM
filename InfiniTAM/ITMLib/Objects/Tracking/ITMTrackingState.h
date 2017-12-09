@@ -33,7 +33,12 @@ namespace ITMLib
 		int age_pointCloud;
 
 		/// Current pose of the depth camera.
+		//TODO (@pgogia) : Treat this as the 
 		ORUtils::SE3Pose *pose_d;
+
+		//TODO (@pgogia) : Add the warp field term that would hold a vector or SE3Pose per node 
+		//Possibly as a map<NodeLocation, SE3Pose> 
+		//std::map<Vector3f, ORUtils::SE3Pose> warp_field;
 
 		/// Tracking quality: 1.0: success, 0.0: failure
 		enum TrackingResult
