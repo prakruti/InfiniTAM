@@ -594,3 +594,190 @@ void ITMExtendedTracker::TrackCamera(ITMTrackingState *trackingState, const ITMV
 
 	this->UpdatePoseQuality(noValidPoints_depth_good, hessian_depth_good, f_depth_good);
 }
+
+void ITMExtendedTracker::EstimateWarpField(ITMTrackingState *trackingState, const ITMView *view)
+{
+	printf("Inside Warp Field Estimation\n");
+	if (trackingState->age_pointCloud >= 0) trackingState->framesProcessed++;
+	else trackingState->framesProcessed = 0;
+
+	this->SetEvaluationData(trackingState, view);
+	this->PrepareForEvaluation();
+
+	float hessian_good[6 * 6];
+	float nabla_good[6];
+
+	for (int i = 0; i < 6 * 6; ++i) hessian_good[i] = 0.0f;
+	for (int i = 0; i < 6; ++i) nabla_good[i] = 0.0f;
+
+	// As a workaround to the fact that the SVM has not been updated to handle the Intensity+Depth tracking
+	// cache the last depth results and use them when evaluating the tracking quality
+	float hessian_depth_good[6 * 6];
+	float f_depth_good = 0;
+	int noValidPoints_depth_good = 0;
+	memset(hessian_depth_good, 0, sizeof(hessian_depth_good));
+
+
+	for (int levelId = viewHierarchy_Depth->GetNoLevels() - 1; levelId >= 0; levelId--)
+	{
+		SetEvaluationParams(levelId);
+
+		if (currentIterationType == TRACKER_ITERATION_NONE) continue;
+		//should this be set to identity in the first run? 
+
+
+		Matrix4f approxInvPose = trackingState->pose_d->GetInvM();
+
+		std::cout << "Inverse pose to world origin\n" << approxInvPose << std::endl;
+		ORUtils::SE3Pose lastKnownGoodPose(*(trackingState->pose_d));
+
+		float f_old = std::numeric_limits<float>::max();
+		float lambda = 1.0;
+
+		for (int iterNo = 0; iterNo < noIterationsPerLevel[levelId]; iterNo++)
+		{
+
+			float hessian_depth[6 * 6], hessian_RGB[6 * 6];
+			float nabla_depth[6], nabla_RGB[6];
+			float f_depth = 0.f, f_RGB = 0.f;
+			int noValidPoints_depth = 0, noValidPoints_RGB = 0;
+
+			// Reset arrays
+			memset(hessian_depth, 0, sizeof(hessian_depth));
+			memset(hessian_RGB, 0, sizeof(hessian_RGB));
+
+			memset(nabla_depth, 0, sizeof(nabla_depth));
+			memset(nabla_RGB, 0, sizeof(nabla_RGB));
+
+			// evaluate error function and gradients
+			if (useDepth)
+			{
+				noValidPoints_depth = ComputeGandH_Depth(f_depth, nabla_depth, hessian_depth, approxInvPose);
+
+				if (noValidPoints_depth > MIN_VALID_POINTS_DEPTH)
+				{
+					// Normalize nabla and hessian
+					for (int i = 0; i < 6 * 6; ++i) hessian_depth[i] /= noValidPoints_depth;
+					for (int i = 0; i < 6; ++i) nabla_depth[i] /= noValidPoints_depth;
+					f_depth /= noValidPoints_depth;
+				}
+				else
+				{
+					f_depth = std::numeric_limits<float>::max();
+				}
+			}
+
+			if (useColour)
+			{
+				noValidPoints_RGB = ComputeGandH_RGB(f_RGB, nabla_RGB, hessian_RGB, approxInvPose);
+
+				if (noValidPoints_RGB > MIN_VALID_POINTS_DEPTH)
+				{
+					// Normalize nabla and hessian
+					for (int i = 0; i < 6 * 6; ++i) hessian_RGB[i] /= noValidPoints_RGB;
+					for (int i = 0; i < 6; ++i) nabla_RGB[i] /= noValidPoints_RGB;
+					f_RGB /= noValidPoints_RGB;
+				}
+				else
+				{
+					f_RGB = std::numeric_limits<float>::max();
+				}
+			}
+
+			float hessian_new[6 * 6];
+			float nabla_new[6];
+			float f_new = 0.f;
+			int noValidPoints_new = 0;
+
+			if (useDepth && useColour)
+			{
+				// Combine depth and intensity measurements
+				if (noValidPoints_depth > MIN_VALID_POINTS_DEPTH)
+				{
+					noValidPoints_new = noValidPoints_depth;
+					f_new = f_depth;
+					memcpy(nabla_new, nabla_depth, sizeof(nabla_depth));
+					memcpy(hessian_new, hessian_depth, sizeof(hessian_depth));
+				}
+				else
+				{
+					// Not enough valid depth correspondences, rely only on colour.
+					noValidPoints_new = 0;
+					f_new = 0.f;
+					memset(nabla_new, 0, sizeof(nabla_new));
+					memset(hessian_new, 0, sizeof(hessian_new));
+				}
+
+				if (noValidPoints_RGB > MIN_VALID_POINTS_RGB)
+				{
+					noValidPoints_new += noValidPoints_RGB;
+					f_new += f_RGB;
+					for (int i = 0; i < 6; ++i) nabla_new[i] += colourWeight * nabla_RGB[i];
+					for (int i = 0; i < 6 * 6; ++i) hessian_new[i] += colourWeight * colourWeight * hessian_RGB[i];
+				}
+			}
+			else if (useDepth)
+			{
+				printf("Using Depth to Track camera\n");
+				noValidPoints_new = noValidPoints_depth;
+				f_new = f_depth;
+				memcpy(nabla_new, nabla_depth, sizeof(nabla_depth));
+				memcpy(hessian_new, hessian_depth, sizeof(hessian_depth));
+			}
+			else if (useColour)
+			{
+				
+				noValidPoints_new = noValidPoints_RGB;
+				f_new = f_RGB;
+				memcpy(nabla_new, nabla_RGB, sizeof(nabla_RGB));
+				memcpy(hessian_new, hessian_RGB, sizeof(hessian_RGB));
+			}
+			else
+			{
+				throw std::runtime_error("Cannot track the camera when both useDepth and useColour are false.");
+			}
+
+			// check if error increased. If so, revert
+			if ((noValidPoints_new <= 0) || (f_new >= f_old))
+			{
+				trackingState->pose_d->SetFrom(&lastKnownGoodPose);
+				approxInvPose = trackingState->pose_d->GetInvM();
+				lambda *= 10.0f;
+			}
+			else
+			{
+				lastKnownGoodPose.SetFrom(trackingState->pose_d);
+				f_old = f_new;
+
+				for (int i = 0; i < 6 * 6; ++i) hessian_good[i] = hessian_new[i];
+				for (int i = 0; i < 6; ++i) nabla_good[i] = nabla_new[i];
+				lambda /= 10.0f;
+
+				// Also cache depth results
+				noValidPoints_depth_good = noValidPoints_depth;
+				f_depth_good = f_depth;
+				memcpy(hessian_depth_good, hessian_depth, sizeof(hessian_depth));
+			}
+
+			float A[6 * 6];
+			for (int i = 0; i < 6 * 6; ++i) A[i] = hessian_good[i];
+			for (int i = 0; i < 6; ++i) A[i + i * 6] *= 1.0f + lambda;
+
+			// compute a new step and make sure we've got an SE3
+			float step[6];
+			ComputeDelta(step, nabla_good, A, currentIterationType != TRACKER_ITERATION_BOTH);
+
+			ApplyDelta(approxInvPose, step, approxInvPose);
+			trackingState->pose_d->SetInvM(approxInvPose);
+			//Coerce R to be a rotation matrix.
+			trackingState->pose_d->Coerce();
+			approxInvPose = trackingState->pose_d->GetInvM();
+
+			// if step is small, assume it's going to decrease the error and finish
+			if (HasConverged(step)) break;
+		}
+	}
+
+	this->UpdatePoseQuality(noValidPoints_depth_good, hessian_depth_good, f_depth_good);
+}
+
