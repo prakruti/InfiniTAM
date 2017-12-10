@@ -183,6 +183,7 @@ try
 	ITMLibSettings *internalSettings = new ITMLibSettings();
 
 	ITMMainEngine *mainEngine = NULL;
+	// internalSettings->libMode = ITMLibSettings::LIBMODE_LOOPCLOSURE;
 	switch (internalSettings->libMode)
 	{
 	case ITMLibSettings::LIBMODE_BASIC:
