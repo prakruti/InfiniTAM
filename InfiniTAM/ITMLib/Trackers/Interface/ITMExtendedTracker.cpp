@@ -11,7 +11,7 @@
 
 #include <math.h>
 #include <limits>
-
+#include <iostream> 
 using namespace ITMLib;
 
 const int ITMExtendedTracker::MIN_VALID_POINTS_DEPTH = 100;
@@ -275,6 +275,7 @@ void ITMExtendedTracker::SetEvaluationParams(int levelId)
 	{
 		// During the optimization, every level of the depth frame pyramid is matched to the full resolution raycast
 		sceneHierarchyLevel_Depth = sceneHierarchy->GetLevel(0);
+		printf("Set sceneHierarchy depth \n");
 	}
 
 	if (useColour)
@@ -340,6 +341,7 @@ void ITMExtendedTracker::ApplyDelta(const Matrix4f & para_old, const float *delt
 
 	Matrix4f Tinc;
 
+	//I + delta_x + (delta_x x delta_x) (rodrigues approx)
 	Tinc.m00 = 1.0f;		Tinc.m10 = step[2];		Tinc.m20 = -step[1];	Tinc.m30 = step[3];
 	Tinc.m01 = -step[2];	Tinc.m11 = 1.0f;		Tinc.m21 = step[0];		Tinc.m31 = step[4];
 	Tinc.m02 = step[1];		Tinc.m12 = -step[0];	Tinc.m22 = 1.0f;		Tinc.m32 = step[5];
@@ -430,13 +432,18 @@ void ITMExtendedTracker::TrackCamera(ITMTrackingState *trackingState, const ITMV
 	int noValidPoints_depth_good = 0;
 	memset(hessian_depth_good, 0, sizeof(hessian_depth_good));
 
+
 	for (int levelId = viewHierarchy_Depth->GetNoLevels() - 1; levelId >= 0; levelId--)
 	{
 		SetEvaluationParams(levelId);
 
 		if (currentIterationType == TRACKER_ITERATION_NONE) continue;
+		//should this be set to identity in the first run? 
+
 
 		Matrix4f approxInvPose = trackingState->pose_d->GetInvM();
+
+		std::cout << "Inverse pose to world origin\n" << approxInvPose << std::endl;
 		ORUtils::SE3Pose lastKnownGoodPose(*(trackingState->pose_d));
 
 		float f_old = std::numeric_limits<float>::max();
@@ -444,6 +451,7 @@ void ITMExtendedTracker::TrackCamera(ITMTrackingState *trackingState, const ITMV
 
 		for (int iterNo = 0; iterNo < noIterationsPerLevel[levelId]; iterNo++)
 		{
+
 			float hessian_depth[6 * 6], hessian_RGB[6 * 6];
 			float nabla_depth[6], nabla_RGB[6];
 			float f_depth = 0.f, f_RGB = 0.f;
@@ -525,7 +533,7 @@ void ITMExtendedTracker::TrackCamera(ITMTrackingState *trackingState, const ITMV
 			}
 			else if (useDepth)
 			{
-				printf("Inside Track Camera::Depth \n");
+				printf("Using Depth to Track camera\n");
 				noValidPoints_new = noValidPoints_depth;
 				f_new = f_depth;
 				memcpy(nabla_new, nabla_depth, sizeof(nabla_depth));

@@ -95,17 +95,24 @@ _CPU_AND_GPU_CODE_ inline bool computePerPointGH_exDepth_Ab(THREADPTR(float) *A,
 	tmp3Dpoint.w = 1.0f;
 
 	// project into previous rendered image
+	// scenePose = T_prev_to_world 
+	// approxInvPose = (T_curr_to_world)^(-1)
+	// tmp3Dpoint_reproj = scenePose*approxInvPose*P_current
+
 	tmp3Dpoint_reproj = scenePose * tmp3Dpoint;
 	if (tmp3Dpoint_reproj.z <= 0.0f) return false;
 	tmp2Dpoint.x = sceneIntrinsics.x * tmp3Dpoint_reproj.x / tmp3Dpoint_reproj.z + sceneIntrinsics.z;
 	tmp2Dpoint.y = sceneIntrinsics.y * tmp3Dpoint_reproj.y / tmp3Dpoint_reproj.z + sceneIntrinsics.w;
 
+	//find overlapping part?
 	if (!((tmp2Dpoint.x >= 0.0f) && (tmp2Dpoint.x <= sceneImageSize.x - 2) && (tmp2Dpoint.y >= 0.0f) && (tmp2Dpoint.y <= sceneImageSize.y - 2)))
 		return false;
 
+	//pointsMap - look up the 3D point in the pointsMap in previous / last known frame
 	curr3Dpoint = interpolateBilinear_withHoles(pointsMap, tmp2Dpoint, sceneImageSize);
 	if (curr3Dpoint.w < 0.0f) return false;
 
+	//curr3Dpoint
 	ptDiff.x = curr3Dpoint.x - tmp3Dpoint.x;
 	ptDiff.y = curr3Dpoint.y - tmp3Dpoint.y;
 	ptDiff.z = curr3Dpoint.z - tmp3Dpoint.z;
@@ -117,6 +124,7 @@ _CPU_AND_GPU_CODE_ inline bool computePerPointGH_exDepth_Ab(THREADPTR(float) *A,
 	corr3Dnormal = interpolateBilinear_withHoles(normalsMap, tmp2Dpoint, sceneImageSize);
 	//if (corr3Dnormal.w < 0.0f) return false;
 
+	// points that are closer are trusted more
 	depthWeight = MAX(0.0f, 1.0f - (depth - viewFrustum_min) / (viewFrustum_max - viewFrustum_min));
 	depthWeight *= depthWeight;
 
