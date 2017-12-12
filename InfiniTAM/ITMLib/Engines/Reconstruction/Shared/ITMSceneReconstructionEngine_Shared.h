@@ -187,18 +187,13 @@ _CPU_AND_GPU_CODE_ inline void buildHashAllocAndVisibleTypePP(DEVICEPTR(uchar) *
 	float oneOverVoxelSize, const CONSTPTR(ITMHashEntry) *hashTable, float viewFrustum_min, float viewFrustum_max)
 {
 
-	Matrix4f transform;
-	transform.setZeros();
-    transform.m00 = transform.m01 = transform.m02 = transform.m03 = 2.0;
-    transform.m10 = transform.m11 = transform.m12 = transform.m13 = 2.0;
-    transform.m20 = transform.m21 = transform.m22 = transform.m23 = 3.0;
-    transform.m30 = transform.m31 = transform.m32 = transform.m33 = 4.0;
+	// Updating the transform using a temporary warp
+	// get warp for this depth point, from voxel index
+    ORUtils::SE3Pose temp_se3;
+    temp_se3.SetFrom(0.1,0.0,0.0,0.0,0.0,0.0);
+	invM_d = invM_d* (temp_se3.GetM());
+	//std::cout << "Updating transform " << invM_d << std::endl; 
 
-	//transform  << 5f,5f,5f,5f,6f,6f,6f,5f,5f,5f,5f,6f,6f,6f,6f,6f;
-
-	std::cout << transform << std::endl;
-	invM_d = invM_d*transform;
-	std::cout << "Updating transform " << std::endl; // << invM_d 
 	float depth_measure; unsigned int hashIdx; int noSteps;
 	Vector4f pt_camera_f; Vector3f point_e, point, direction; Vector3s blockPos;
 
@@ -212,7 +207,6 @@ _CPU_AND_GPU_CODE_ inline void buildHashAllocAndVisibleTypePP(DEVICEPTR(uchar) *
 	float norm = sqrt(pt_camera_f.x * pt_camera_f.x + pt_camera_f.y * pt_camera_f.y + pt_camera_f.z * pt_camera_f.z);
 
 	Vector4f pt_buff;
-	ORUtils::SE3Pose *temp_se3;
 	
 	pt_buff = pt_camera_f * (1.0f - mu / norm); pt_buff.w = 1.0f;
 	point = TO_VECTOR3(invM_d * pt_buff) * oneOverVoxelSize;
