@@ -89,16 +89,18 @@ struct ITMVoxel_s_warp
 	//Warp field value
 	ORUtils::SE3Pose *dg_se3;
 
-	//Warp radius 
+	// //Warp radius 
 	int dg_w;
 
-	//Position of the voxel - 
-	Vector3u dg_v; // Should we store this? 
+	// //Position of the voxel - 
+	// Vector3u dg_v; // Should we store this? 
 
 	_CPU_AND_GPU_CODE_ ITMVoxel_s_warp()
 	{
 		sdf = SDF_initialValue();
 		w_depth = 0;
+		dg_w = 0;
+		dg_se3 = new ORUtils::SE3Pose();
 	}
 };
 

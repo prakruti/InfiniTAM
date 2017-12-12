@@ -90,15 +90,20 @@ _CPU_AND_GPU_CODE_ inline bool computePerPointGH_exDepth_Ab(THREADPTR(float) *A,
 	tmp3Dpoint.z = depth;
 	tmp3Dpoint.w = 1.0f;
 
-	// transform to previous frame coordinates
+
+	//IM = KWarp*Pose*X
+	//Warp_Inv, Pose_Inv 
+	// transform to approxInvPose - T_current_to_world
 	tmp3Dpoint = approxInvPose * tmp3Dpoint;
 	tmp3Dpoint.w = 1.0f;
+	//tmp 3D POINT is in world coordinates now.
 
 	// project into previous rendered image
 	// scenePose = T_prev_to_world 
 	// approxInvPose = (T_curr_to_world)^(-1)
 	// tmp3Dpoint_reproj = scenePose*approxInvPose*P_current
 
+	//bring it to the prev frame
 	tmp3Dpoint_reproj = scenePose * tmp3Dpoint;
 	if (tmp3Dpoint_reproj.z <= 0.0f) return false;
 	tmp2Dpoint.x = sceneIntrinsics.x * tmp3Dpoint_reproj.x / tmp3Dpoint_reproj.z + sceneIntrinsics.z;
@@ -161,6 +166,118 @@ _CPU_AND_GPU_CODE_ inline bool computePerPointGH_exDepth_Ab(THREADPTR(float) *A,
 
 	return true;
 }
+
+template<bool shortIteration, bool rotationOnly, bool useWeights>
+_CPU_AND_GPU_CODE_ inline bool computePerPointGH_exDepth_Ab_patch(THREADPTR(float) *A, THREADPTR(float) &b,
+	const THREADPTR(int) & x, const THREADPTR(int) & y, const CONSTPTR(float) &depth, THREADPTR(float) &depthWeight,
+	const CONSTPTR(Vector2i) & viewImageSize, const CONSTPTR(Vector4f) & viewIntrinsics, const CONSTPTR(Vector2i) & sceneImageSize,
+	const CONSTPTR(Vector4f) & sceneIntrinsics, const CONSTPTR(Matrix4f) & approxInvPose, const CONSTPTR(Matrix4f) & approxInvWarp, const CONSTPTR(Matrix4f) & scenePose, const CONSTPTR(Vector4f) *pointsMap,
+	const CONSTPTR(Vector4f) *normalsMap, float spaceThresh, float viewFrustum_min, float viewFrustum_max, float tukeyCutOff, int framesToSkip, int framesToWeight)
+{
+	// printf("computePerPointGH_exDepth_Ab \n");
+
+	//Calculates J^T (deltax)
+	depthWeight = 0;
+
+	if (depth <= 1e-8f) return false; //check if valid -- != 0.0f
+
+	Vector4f tmp3Dpoint, tmp3Dpoint_reproj, tmp3Dpoint_adjusted; Vector3f ptDiff;
+	Vector4f curr3Dpoint, corr3Dnormal, corr3Dnormal_adjusted; Vector2f tmp2Dpoint;
+
+	// z K^(-1)[ u v 1]
+	//Intrinsics 
+	// z = px , w = py, x = fx, y = fy
+	//unproject 
+	tmp3Dpoint.x = depth * ((float(x) - viewIntrinsics.z) / viewIntrinsics.x);
+	tmp3Dpoint.y = depth * ((float(y) - viewIntrinsics.w) / viewIntrinsics.y);
+	tmp3Dpoint.z = depth;
+	tmp3Dpoint.w = 1.0f;
+
+	//IM = KWarp*Pose*X
+	//Warp_Inv, Pose_Inv 
+	// transform to approxInvPose - T_current_to_world
+	//update the tmp3Dpoint 
+	tmp3Dpoint_adjusted = approxInvWarp * tmp3Dpoint;
+	tmp3Dpoint_adjusted.w = 1.0f;
+
+	tmp3Dpoint = approxInvPose * tmp3Dpoint_adjusted;
+	tmp3Dpoint.w = 1.0f;
+	//tmp 3D POINT is in world coordinates now.
+
+	// project into previous rendered image
+	// scenePose = T_prev_to_world 
+	// approxInvPose = (T_curr_to_world)^(-1)
+	// tmp3Dpoint_reproj = scenePose*approxInvPose*P_current
+
+	//bring it to the prev frame
+	tmp3Dpoint_reproj = sceneWarp*scenePose * tmp3Dpoint;
+	if (tmp3Dpoint_reproj.z <= 0.0f) return false;
+	tmp2Dpoint.x = sceneIntrinsics.x * tmp3Dpoint_reproj.x / tmp3Dpoint_reproj.z + sceneIntrinsics.z;
+	tmp2Dpoint.y = sceneIntrinsics.y * tmp3Dpoint_reproj.y / tmp3Dpoint_reproj.z + sceneIntrinsics.w;
+
+	//find overlapping part?
+	if (!((tmp2Dpoint.x >= 0.0f) && (tmp2Dpoint.x <= sceneImageSize.x - 2) && (tmp2Dpoint.y >= 0.0f) && (tmp2Dpoint.y <= sceneImageSize.y - 2)))
+		return false;
+
+	//pointsMap - look up the 3D point in the pointsMap in previous / last known frame
+	curr3Dpoint = interpolateBilinear_withHoles(pointsMap, tmp2Dpoint, sceneImageSize);
+	if (curr3Dpoint.w < 0.0f) return false;
+
+	//curr3Dpoint
+	ptDiff.x = curr3Dpoint.x - tmp3Dpoint.x;
+	ptDiff.y = curr3Dpoint.y - tmp3Dpoint.y;
+	ptDiff.z = curr3Dpoint.z - tmp3Dpoint.z;
+	float dist = ptDiff.x * ptDiff.x + ptDiff.y * ptDiff.y + ptDiff.z * ptDiff.z; //cost
+
+	//Do not consider outliers in the pose estimation - how to handle in warp field estimation 
+	if (dist > tukeyCutOff * spaceThresh) return false;
+
+	//corrected 3D normal? 
+	corr3Dnormal = interpolateBilinear_withHoles(normalsMap, tmp2Dpoint, sceneImageSize);
+	if (corr3Dnormal.w < 0.0f) return false;
+
+
+	//update the corr3Dnormal because the warp is in the middle
+	corr3Dnormal_adjusted = (approxInvPose).transpose().rotation()*corr3Dnormal;
+
+	// points that are closer are trusted more
+	depthWeight = MAX(0.0f, 1.0f - (depth - viewFrustum_min) / (viewFrustum_max - viewFrustum_min));
+	depthWeight *= depthWeight; //just squaring the weight
+
+	if (useWeights)
+	{
+		if (curr3Dpoint.w < framesToSkip) return false;
+		depthWeight *= (curr3Dpoint.w - framesToSkip) / framesToWeight;
+	}
+
+	//delta_x 
+	b = corr3Dnormal.x * ptDiff.x + corr3Dnormal.y * ptDiff.y + corr3Dnormal.z * ptDiff.z;
+
+	// TODO check whether normal matches normal from image, done in the original paper, but does not seem to be required
+	//Another way to reject outliers? Comparing normals 
+
+	if (shortIteration)
+	{
+		if (rotationOnly)
+		{
+			//looks like a cross product 
+			A[0] = +tmp3Dpoint_adjusted.z * corr3Dnormal_adjusted.y - tmp3Dpoint_adjusted.y * corr3Dnormal_adjusted.z;
+			A[1] = -tmp3Dpoint_adjusted.z * corr3Dnormal_adjusted.x + tmp3Dpoint_adjusted.x * corr3Dnormal_adjusted.z;
+			A[2] = +tmp3Dpoint_adjusted.y * corr3Dnormal_adjusted.x - tmp3Dpoint_adjusted.x * corr3Dnormal_adjusted.y;
+		}
+		else { A[0] = corr3Dnormal_adjusted.x; A[1] = corr3Dnormal_adjusted.y; A[2] = corr3Dnormal_adjusted.z; }
+	}
+	else
+	{
+		A[0] = +tmp3Dpoint_adjusted.z * corr3Dnormal_adjusted.y - tmp3Dpoint_adjusted.y * corr3Dnormal_adjusted.z;
+		A[1] = -tmp3Dpoint_adjusted.z * corr3Dnormal_adjusted.x + tmp3Dpoint_adjusted.x * corr3Dnormal_adjusted.z;
+		A[2] = +tmp3Dpoint_adjusted.y * corr3Dnormal_adjusted.x - tmp3Dpoint_adjusted.x * corr3Dnormal_adjusted.y;
+		A[!shortIteration ? 3 : 0] = corr3Dnormal_adjusted.x; A[!shortIteration ? 4 : 1] = corr3Dnormal_adjusted.y; A[!shortIteration ? 5 : 2] = corr3Dnormal_adjusted.z;
+	}
+
+	return true;
+}
+
 
 template<bool shortIteration, bool rotationOnly>
 _CPU_AND_GPU_CODE_ inline bool computePerPointGH_exRGB_inv_Ab(
@@ -348,6 +465,40 @@ _CPU_AND_GPU_CODE_ inline bool computePerPointGH_exDepth(THREADPTR(float) *local
 
 	return true;
 }
+
+
+template<bool shortIteration, bool rotationOnly, bool useWeights>
+_CPU_AND_GPU_CODE_ inline bool computePerPointGH_exDepth_patch(THREADPTR(float) *localNabla, THREADPTR(float) *localHessian, THREADPTR(float) &localF,
+	const THREADPTR(int) & x, const THREADPTR(int) & y, const CONSTPTR(float) &depth, THREADPTR(float) &depthWeight, CONSTPTR(Vector2i) & viewImageSize, const CONSTPTR(Vector4f) & viewIntrinsics,
+	const CONSTPTR(Vector2i) & sceneImageSize, const CONSTPTR(Vector4f) & sceneIntrinsics, const CONSTPTR(Matrix4f) & approxInvPose, const CONSTPTR(Matrix4f) & approxInvWarp, const CONSTPTR(Matrix4f) & scenePose,
+	const CONSTPTR(Vector4f) *pointsMap, const CONSTPTR(Vector4f) *normalsMap, float spaceThresh, float viewFrustum_min, float viewFrustum_max, float tukeyCutOff, int framesToSkip, int framesToWeight)
+{
+	const int noPara = shortIteration ? 3 : 6;
+	float A[noPara];
+	float b;
+
+	bool ret = computePerPointGH_exDepth_Ab_patch<shortIteration, rotationOnly, useWeights>(A, b, x, y, depth, depthWeight, viewImageSize, viewIntrinsics, sceneImageSize, sceneIntrinsics,
+		approxInvPose, approxInvWarp, scenePose, pointsMap, normalsMap, spaceThresh, viewFrustum_min, viewFrustum_max, tukeyCutOff, framesToSkip, framesToWeight);
+
+	if (!ret) return false;
+
+	localF = rho(b, spaceThresh) * depthWeight;
+
+#if (defined(__CUDACC__) && defined(__CUDA_ARCH__)) || (defined(__METALC__))
+#pragma unroll
+#endif
+	for (int r = 0, counter = 0; r < noPara; r++)
+	{
+		localNabla[r] = rho_deriv(b, spaceThresh) * depthWeight * A[r];
+#if (defined(__CUDACC__) && defined(__CUDA_ARCH__)) || (defined(__METALC__))
+#pragma unroll
+#endif
+		for (int c = 0; c <= r; c++, counter++) localHessian[counter] = rho_deriv2(b, spaceThresh) * depthWeight * A[r] * A[c];
+	}
+
+	return true;
+}
+
 
 _CPU_AND_GPU_CODE_ inline bool computePerPointProjectedColour_exRGB(
 		THREADPTR(int) x,

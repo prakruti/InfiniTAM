@@ -601,9 +601,11 @@ void ITMExtendedTracker::EstimateWarpField(ITMTrackingState *trackingState, cons
 	if (trackingState->age_pointCloud >= 0) trackingState->framesProcessed++;
 	else trackingState->framesProcessed = 0;
 
+	//tracking state has the newest pose_d 
 	this->SetEvaluationData(trackingState, view);
 	this->PrepareForEvaluation();
 
+	//
 	float hessian_good[6 * 6];
 	float nabla_good[6];
 
@@ -617,44 +619,56 @@ void ITMExtendedTracker::EstimateWarpField(ITMTrackingState *trackingState, cons
 	int noValidPoints_depth_good = 0;
 	memset(hessian_depth_good, 0, sizeof(hessian_depth_good));
 
+	
 
-	for (int levelId = viewHierarchy_Depth->GetNoLevels() - 1; levelId >= 0; levelId--)
+	//coarse to fine assume one level only 
+	Vector2i viewImageSize = viewHierarchyLevel_Depth->depth->noDims;
+
+	//calculate the ratio of the patch_size to the entire image size 
+	float size_ratio = (patch_size_x*patch_size_y)/(viewImageSize.x*viewImageSize.y);
+
+	for(int x = 0; x < viewImageSize.x; x=x+patch_size_x)
 	{
-		SetEvaluationParams(levelId);
+		for(int y = 0; y < viewImageSize.y; y=y+patch_size_y)
+		{
+			//for all the patch values calculate hessian, nabla
+			Vector2i location(x,y);
 
-		if (currentIterationType == TRACKER_ITERATION_NONE) continue;
-		//should this be set to identity in the first run? 
+			//LM for the current patch 
+			//Set initial guess of warp field to identity 
+			ORUtils::SE3Pose lastKnownGoodPose = ORUtils::SE3Pose();
 
+			//Contains the camera pose of the current frame 
+			Matrix4f approxInvPose = trackingState->pose_d->GetInvM();
 
-		Matrix4f approxInvPose = trackingState->pose_d->GetInvM();
+			//estimate the warp to be approxInvWarp at first
+			Matrix4f approxInvWarp = ORUtils::SE3Pose();
 
-		std::cout << "Inverse pose to world origin\n" << approxInvPose << std::endl;
-		ORUtils::SE3Pose lastKnownGoodPose(*(trackingState->pose_d));
+			//We do need the pose of the previous frame - make sure scene pose is not updated
+			std::cout << "Inverse pose to world origin\n" << approxInvPose << std::endl;
 
-		float f_old = std::numeric_limits<float>::max();
-		float lambda = 1.0;
+			float f_old = std::numeric_limits<float>::max();
+			float lambda = 1.0;
 
-		for (int iterNo = 0; iterNo < noIterationsPerLevel[levelId]; iterNo++)
+		for (int iterNo = 0; iterNo < noIterationsPerLevel[0]; iterNo++)
 		{
 
-			float hessian_depth[6 * 6], hessian_RGB[6 * 6];
-			float nabla_depth[6], nabla_RGB[6];
-			float f_depth = 0.f, f_RGB = 0.f;
-			int noValidPoints_depth = 0, noValidPoints_RGB = 0;
+			float hessian_depth[6 * 6];
+			float nabla_depth[6];
+			float f_depth = 0.f;
+			int noValidPoints_depth = 0;
 
 			// Reset arrays
 			memset(hessian_depth, 0, sizeof(hessian_depth));
-			memset(hessian_RGB, 0, sizeof(hessian_RGB));
-
 			memset(nabla_depth, 0, sizeof(nabla_depth));
-			memset(nabla_RGB, 0, sizeof(nabla_RGB));
 
 			// evaluate error function and gradients
 			if (useDepth)
 			{
-				noValidPoints_depth = ComputeGandH_Depth(f_depth, nabla_depth, hessian_depth, approxInvPose);
+				//change this so it only considers this patch
+				noValidPoints_depth = ComputeGandH_Depth(f_depth, nabla_depth, hessian_depth, approxInvPose, approxInvWarp, start_x, start_y, patch_size_x, patch_size_y);
 
-				if (noValidPoints_depth > MIN_VALID_POINTS_DEPTH)
+				if (noValidPoints_depth > size_ratio*MIN_VALID_POINTS_DEPTH)
 				{
 					// Normalize nabla and hessian
 					for (int i = 0; i < 6 * 6; ++i) hessian_depth[i] /= noValidPoints_depth;
@@ -667,70 +681,18 @@ void ITMExtendedTracker::EstimateWarpField(ITMTrackingState *trackingState, cons
 				}
 			}
 
-			if (useColour)
-			{
-				noValidPoints_RGB = ComputeGandH_RGB(f_RGB, nabla_RGB, hessian_RGB, approxInvPose);
-
-				if (noValidPoints_RGB > MIN_VALID_POINTS_DEPTH)
-				{
-					// Normalize nabla and hessian
-					for (int i = 0; i < 6 * 6; ++i) hessian_RGB[i] /= noValidPoints_RGB;
-					for (int i = 0; i < 6; ++i) nabla_RGB[i] /= noValidPoints_RGB;
-					f_RGB /= noValidPoints_RGB;
-				}
-				else
-				{
-					f_RGB = std::numeric_limits<float>::max();
-				}
-			}
-
 			float hessian_new[6 * 6];
 			float nabla_new[6];
 			float f_new = 0.f;
 			int noValidPoints_new = 0;
 
-			if (useDepth && useColour)
-			{
-				// Combine depth and intensity measurements
-				if (noValidPoints_depth > MIN_VALID_POINTS_DEPTH)
-				{
-					noValidPoints_new = noValidPoints_depth;
-					f_new = f_depth;
-					memcpy(nabla_new, nabla_depth, sizeof(nabla_depth));
-					memcpy(hessian_new, hessian_depth, sizeof(hessian_depth));
-				}
-				else
-				{
-					// Not enough valid depth correspondences, rely only on colour.
-					noValidPoints_new = 0;
-					f_new = 0.f;
-					memset(nabla_new, 0, sizeof(nabla_new));
-					memset(hessian_new, 0, sizeof(hessian_new));
-				}
-
-				if (noValidPoints_RGB > MIN_VALID_POINTS_RGB)
-				{
-					noValidPoints_new += noValidPoints_RGB;
-					f_new += f_RGB;
-					for (int i = 0; i < 6; ++i) nabla_new[i] += colourWeight * nabla_RGB[i];
-					for (int i = 0; i < 6 * 6; ++i) hessian_new[i] += colourWeight * colourWeight * hessian_RGB[i];
-				}
-			}
-			else if (useDepth)
+			if(useDepth)
 			{
 				printf("Using Depth to Track camera\n");
 				noValidPoints_new = noValidPoints_depth;
 				f_new = f_depth;
 				memcpy(nabla_new, nabla_depth, sizeof(nabla_depth));
 				memcpy(hessian_new, hessian_depth, sizeof(hessian_depth));
-			}
-			else if (useColour)
-			{
-				
-				noValidPoints_new = noValidPoints_RGB;
-				f_new = f_RGB;
-				memcpy(nabla_new, nabla_RGB, sizeof(nabla_RGB));
-				memcpy(hessian_new, hessian_RGB, sizeof(hessian_RGB));
 			}
 			else
 			{
@@ -740,13 +702,17 @@ void ITMExtendedTracker::EstimateWarpField(ITMTrackingState *trackingState, cons
 			// check if error increased. If so, revert
 			if ((noValidPoints_new <= 0) || (f_new >= f_old))
 			{
-				trackingState->pose_d->SetFrom(&lastKnownGoodPose);
-				approxInvPose = trackingState->pose_d->GetInvM();
+				// trackingState->pose_d->SetFrom(&lastKnownGoodPose);
+				trackingState->warp_field[location]->SetFrom(&lastKnownGoodPose);
+
+				//don't update this. update the approxInvWarp 
+				// approxInvPose = trackingState->pose_d->GetInvM();
+				approxInvWarp = trackingState->warp_field[location]->GetInvM();
 				lambda *= 10.0f;
 			}
 			else
 			{
-				lastKnownGoodPose.SetFrom(trackingState->pose_d);
+				lastKnownGoodPose.SetFrom(trackingState->warp_field[location]);
 				f_old = f_new;
 
 				for (int i = 0; i < 6 * 6; ++i) hessian_good[i] = hessian_new[i];
@@ -767,8 +733,10 @@ void ITMExtendedTracker::EstimateWarpField(ITMTrackingState *trackingState, cons
 			float step[6];
 			ComputeDelta(step, nabla_good, A, currentIterationType != TRACKER_ITERATION_BOTH);
 
-			ApplyDelta(approxInvPose, step, approxInvPose);
-			trackingState->pose_d->SetInvM(approxInvPose);
+			ApplyDelta(approxInvWarp, step, approxInvWarp);
+			// trackingState->pose_d->SetInvM(approxInvPose);
+			trackingState->warp_field[location]->SetInvM(approxInvWarp);
+
 			//Coerce R to be a rotation matrix.
 			trackingState->pose_d->Coerce();
 			approxInvPose = trackingState->pose_d->GetInvM();
@@ -776,8 +744,16 @@ void ITMExtendedTracker::EstimateWarpField(ITMTrackingState *trackingState, cons
 			// if step is small, assume it's going to decrease the error and finish
 			if (HasConverged(step)) break;
 		}
+
+			//save the estimate for warp at location x, y in the map 
+			trackingState->warp_field.insert(make_pair(location, estimate));
+
+
+			this->UpdatePoseQuality(noValidPoints_depth_good, hessian_depth_good, f_depth_good); 
+		}
 	}
 
-	this->UpdatePoseQuality(noValidPoints_depth_good, hessian_depth_good, f_depth_good);
+	
+	
 }
 

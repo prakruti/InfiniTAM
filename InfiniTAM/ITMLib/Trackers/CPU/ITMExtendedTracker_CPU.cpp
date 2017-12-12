@@ -151,6 +151,115 @@ int ITMExtendedTracker_CPU::ComputeGandH_Depth(float &f, float *nabla, float *he
 	return noValidPoints;
 }
 
+int ITMExtendedTracker_CPU::ComputeGandH_Depth_patch(float &f, float *nabla, float *hessian, Matrix4f approxInvPose, Matrix4f approxInvWarp, int start_x, int start_y, int patch_size_x, int patch_size_y)
+{
+	Vector4f *pointsMap = sceneHierarchyLevel_Depth->pointsMap->GetData(MEMORYDEVICE_CPU);
+	Vector4f *normalsMap = sceneHierarchyLevel_Depth->normalsMap->GetData(MEMORYDEVICE_CPU);
+	Vector4f sceneIntrinsics = sceneHierarchyLevel_Depth->intrinsics;
+	Vector2i sceneImageSize = sceneHierarchyLevel_Depth->pointsMap->noDims;
+
+	float *depth = viewHierarchyLevel_Depth->depth->GetData(MEMORYDEVICE_CPU);
+	Vector4f viewIntrinsics = viewHierarchyLevel_Depth->intrinsics;
+	Vector2i viewImageSize = viewHierarchyLevel_Depth->depth->noDims;
+
+	if (currentIterationType == TRACKER_ITERATION_NONE) return 0;
+
+	bool shortIteration = (currentIterationType == TRACKER_ITERATION_ROTATION)
+						   || (currentIterationType == TRACKER_ITERATION_TRANSLATION);
+
+	float sumHessian[6 * 6], sumNabla[6], sumF; int noValidPoints;
+	int noPara = shortIteration ? 3 : 6, noParaSQ = shortIteration ? 3 + 2 + 1 : 6 + 5 + 4 + 3 + 2 + 1;
+
+	noValidPoints = 0; sumF = 0.0f;
+	memset(sumHessian, 0, sizeof(float) * noParaSQ);
+	memset(sumNabla, 0, sizeof(float) * noPara);
+
+	for (int y = start_y; y < patch_size_y; y++) for (int x = start_x; x < patch_size_x; x++)
+	{
+		float localHessian[6 + 5 + 4 + 3 + 2 + 1], localNabla[6], localF = 0;
+
+		for (int i = 0; i < noPara; i++) localNabla[i] = 0.0f;
+		for (int i = 0; i < noParaSQ; i++) localHessian[i] = 0.0f;
+
+		bool isValidPoint;
+
+		float depthWeight;
+
+		if (framesProcessed < 100)
+		{
+			switch (currentIterationType)
+			{
+			case TRACKER_ITERATION_ROTATION:
+				isValidPoint = computePerPointGH_exDepth_patch<true, true, false>(localNabla, localHessian, localF, x, y, depth[x + y * viewImageSize.x], depthWeight,
+					viewImageSize, viewIntrinsics, sceneImageSize, sceneIntrinsics, approxInvPose, approxInvWarp, scenePose, pointsMap, normalsMap, spaceThresh[currentLevelId],
+					viewFrustum_min, viewFrustum_max, tukeyCutOff, framesToSkip, framesToWeight);
+				break;
+			case TRACKER_ITERATION_TRANSLATION:
+				isValidPoint = computePerPointGH_exDepth_patch<true, false, false>(localNabla, localHessian, localF, x, y, depth[x + y * viewImageSize.x], depthWeight,
+					viewImageSize, viewIntrinsics, sceneImageSize, sceneIntrinsics, approxInvPose, approxInvWarp, scenePose, pointsMap, normalsMap, spaceThresh[currentLevelId],
+					viewFrustum_min, viewFrustum_max, tukeyCutOff, framesToSkip, framesToWeight);
+				break;
+			case TRACKER_ITERATION_BOTH:
+				isValidPoint = computePerPointGH_exDepth_patch<false, false, false>(localNabla, localHessian, localF, x, y, depth[x + y * viewImageSize.x], depthWeight,
+					viewImageSize, viewIntrinsics, sceneImageSize, sceneIntrinsics, approxInvPose, approxInvWarp, scenePose, pointsMap, normalsMap, spaceThresh[currentLevelId],
+					viewFrustum_min, viewFrustum_max, tukeyCutOff, framesToSkip, framesToWeight);
+				break;
+			default:
+				isValidPoint = false;
+				break;
+			}
+		}
+		else
+		{
+			switch (currentIterationType)
+			{
+			case TRACKER_ITERATION_ROTATION:
+				isValidPoint = computePerPointGH_exDepth_patch<true, true, true>(localNabla, localHessian, localF, x, y, depth[x + y * viewImageSize.x], depthWeight,
+					viewImageSize, viewIntrinsics, sceneImageSize, sceneIntrinsics, approxInvPose, approxInvWarp, scenePose, pointsMap, normalsMap, spaceThresh[currentLevelId],
+					viewFrustum_min, viewFrustum_max, tukeyCutOff, framesToSkip, framesToWeight);
+				break;
+			case TRACKER_ITERATION_TRANSLATION:
+				isValidPoint = computePerPointGH_exDepth_patch<true, false, true>(localNabla, localHessian, localF, x, y, depth[x + y * viewImageSize.x], depthWeight,
+					viewImageSize, viewIntrinsics, sceneImageSize, sceneIntrinsics, approxInvPose, approxInvWarp, scenePose, pointsMap, normalsMap, spaceThresh[currentLevelId],
+					viewFrustum_min, viewFrustum_max, tukeyCutOff, framesToSkip, framesToWeight);
+				break;
+			case TRACKER_ITERATION_BOTH:
+				isValidPoint = computePerPointGH_exDepth_patch<false, false, true>(localNabla, localHessian, localF, x, y, depth[x + y * viewImageSize.x], depthWeight,
+					viewImageSize, viewIntrinsics, sceneImageSize, sceneIntrinsics, approxInvPose, approxInvWarp, scenePose, pointsMap, normalsMap, spaceThresh[currentLevelId],
+					viewFrustum_min, viewFrustum_max, tukeyCutOff, framesToSkip, framesToWeight);
+				break;
+			default:
+				isValidPoint = false;
+				break;
+			}
+		}
+
+		if (isValidPoint)
+		{
+			noValidPoints++;
+			sumF += localF;
+			for (int i = 0; i < noPara; i++) sumNabla[i] += localNabla[i];
+			for (int i = 0; i < noParaSQ; i++) sumHessian[i] += localHessian[i];
+		}
+	}
+
+	// Copy the lower triangular part of the matrix.
+	for (int r = 0, counter = 0; r < noPara; r++)
+		for (int c = 0; c <= r; c++, counter++)
+			hessian[r + c * 6] = sumHessian[counter];
+
+	// Transpose to fill the upper triangle.
+	for (int r = 0; r < noPara; ++r)
+		for (int c = r + 1; c < noPara; c++)
+			hessian[r + c * 6] = hessian[c + r * 6];
+
+	memcpy(nabla, sumNabla, noPara * sizeof(float));
+
+	f = sumF;
+
+	return noValidPoints;
+}
+
 int ITMExtendedTracker_CPU::ComputeGandH_RGB(float &f, float *nabla, float *hessian, Matrix4f approxInvPose)
 {
 	const Vector2i viewImageSize_depth = viewHierarchyLevel_Depth->depth->noDims;
