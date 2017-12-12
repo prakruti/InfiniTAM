@@ -52,6 +52,7 @@ namespace ITMLib
 				visualisationEngine->FindSurface(scene, trackingState->pose_d, &view->calib.intrinsics_d, useRadii, USR_FAUTEDEMIEUX, renderState);
 				trackingState->pose_pointCloud->SetFrom(trackingState->pose_d);
 
+
 				if(requiresFullRendering)
 				{
 					visualisationEngine->CreateICPMaps(scene, renderState, trackingState);
@@ -90,6 +91,10 @@ namespace ITMLib
 
 				if (requiresFullRendering)
 				{
+									//Warp the pointcloud so that a single scenePose warp can bring you back to the previous frames coordinate
+				//OR save the warps of each point in the current point cloud
+				
+				//TODO (@pgogia) : Find a way to pass the previous frame's warps 
 					visualisationEngine->CreateICPMaps(scene, view, trackingState, renderState);
 					trackingState->pose_pointCloud->SetFrom(trackingState->pose_d);
 					if (trackingState->age_pointCloud==-1) trackingState->age_pointCloud=-2;

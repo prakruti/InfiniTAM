@@ -10,6 +10,7 @@ namespace ITMLib
 	{
 	protected:
 		int ComputeGandH_Depth(float &f, float *nabla, float *hessian, Matrix4f approxInvPose);
+		int ComputeGandH_Depth_patch(float &f, float *nabla, float *hessian, Matrix4f approxInvPose, Matrix4f approxInvWarp, int start_x, int start_y, int patch_size_x, int patch_size_y);
 		int ComputeGandH_RGB(float &f, float *nabla, float *hessian, Matrix4f approxInvPose);
 		void ProjectCurrentIntensityFrame(ITMFloat4Image *points_out,
 										  ITMFloatImage *intensity_out,

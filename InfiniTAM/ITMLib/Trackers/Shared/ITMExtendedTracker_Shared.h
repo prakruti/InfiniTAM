@@ -182,7 +182,7 @@ _CPU_AND_GPU_CODE_ inline bool computePerPointGH_exDepth_Ab_patch(THREADPTR(floa
 	if (depth <= 1e-8f) return false; //check if valid -- != 0.0f
 
 	Vector4f tmp3Dpoint, tmp3Dpoint_reproj, tmp3Dpoint_adjusted; Vector3f ptDiff;
-	Vector4f curr3Dpoint, corr3Dnormal, corr3Dnormal_adjusted; Vector2f tmp2Dpoint;
+	Vector4f curr3Dpoint, corr3Dnormal; Vector2f tmp2Dpoint;
 
 	// z K^(-1)[ u v 1]
 	//Intrinsics 
@@ -210,7 +210,7 @@ _CPU_AND_GPU_CODE_ inline bool computePerPointGH_exDepth_Ab_patch(THREADPTR(floa
 	// tmp3Dpoint_reproj = scenePose*approxInvPose*P_current
 
 	//bring it to the prev frame
-	tmp3Dpoint_reproj = sceneWarp*scenePose * tmp3Dpoint;
+	tmp3Dpoint_reproj = sceneWarp * scenePose * tmp3Dpoint;
 	if (tmp3Dpoint_reproj.z <= 0.0f) return false;
 	tmp2Dpoint.x = sceneIntrinsics.x * tmp3Dpoint_reproj.x / tmp3Dpoint_reproj.z + sceneIntrinsics.z;
 	tmp2Dpoint.y = sceneIntrinsics.y * tmp3Dpoint_reproj.y / tmp3Dpoint_reproj.z + sceneIntrinsics.w;
@@ -237,8 +237,11 @@ _CPU_AND_GPU_CODE_ inline bool computePerPointGH_exDepth_Ab_patch(THREADPTR(floa
 	if (corr3Dnormal.w < 0.0f) return false;
 
 
-	//update the corr3Dnormal because the warp is in the middle
-	corr3Dnormal_adjusted = (approxInvPose).transpose().rotation()*corr3Dnormal;
+	//update the corr3Dnormal because the warp is in the middle just the rotation part of approxInvPose
+	Matrix4f approxInvPose_transpose = (approxInvPose).t();
+	Vector4f corr3Dnormal_adjusted(corr3Dnormal.x, corr3Dnormal.y, corr3Dnormal.z, 0.0f);
+	corr3Dnormal_adjusted = (approxInvPose_transpose)*corr3Dnormal_adjusted;
+
 
 	// points that are closer are trusted more
 	depthWeight = MAX(0.0f, 1.0f - (depth - viewFrustum_min) / (viewFrustum_max - viewFrustum_min));
