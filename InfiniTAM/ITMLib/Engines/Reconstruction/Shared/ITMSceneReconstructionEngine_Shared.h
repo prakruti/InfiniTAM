@@ -43,6 +43,8 @@ _CPU_AND_GPU_CODE_ inline float computeUpdatedVoxelDepthInfo(DEVICEPTR(TVoxel) &
 
 	// write back
 	voxel.sdf = TVoxel::floatToValue(newF);
+
+	//write warp ro voxel, to keep track
 	voxel.w_depth = newW;
 
 	return eta;
@@ -57,7 +59,13 @@ _CPU_AND_GPU_CODE_ inline float computeUpdatedVoxelDepthInfo(DEVICEPTR(TVoxel) &
 	int oldW, newW, locId;
 
 	// project point into image
-	pt_camera = M_d * pt_model;
+
+	// apply temp warp
+	ORUtils::SE3Pose temp_se3;
+    temp_se3.SetFrom(0.0,0.0,0.0,0.0,0.0,0.0);
+	
+	pt_camera = temp_se3.GetM() * M_d * pt_model;
+	//pt_camera = M_d * pt_model;
 	if (pt_camera.z <= 0) return -1;
 
 	pt_image.x = projParams_d.x * pt_camera.x / pt_camera.z + projParams_d.z;
@@ -71,6 +79,8 @@ _CPU_AND_GPU_CODE_ inline float computeUpdatedVoxelDepthInfo(DEVICEPTR(TVoxel) &
 
 	// check whether voxel needs updating
 	eta = depth_measure - pt_camera.z;
+
+	//commenting this line because when we are experimenting with fake warps
 	if (eta < -mu) return eta;
 
 	// compute updated SDF value and reliability
@@ -187,12 +197,20 @@ _CPU_AND_GPU_CODE_ inline void buildHashAllocAndVisibleTypePP(DEVICEPTR(uchar) *
 	float oneOverVoxelSize, const CONSTPTR(ITMHashEntry) *hashTable, float viewFrustum_min, float viewFrustum_max)
 {
 
-	// Updating the transform using a temporary warp
-	// get warp for this depth point, from voxel index
+	// Updating the transform using a temporary warp inverse
+	// get this SE3 from trackingstate
+	// temp_SE3 = trackingstate.warp_map[x,y];
+
     ORUtils::SE3Pose temp_se3;
-    temp_se3.SetFrom(0.1,0.0,0.0,0.0,0.0,0.0);
-	invM_d = invM_d* (temp_se3.GetM());
-	//std::cout << "Updating transform " << invM_d << std::endl; 
+    temp_se3.SetFrom(0.0,0.0,0.0,0.0,0.0,0.0);
+    Matrix4f temp_se3_Minv;
+	temp_se3.GetM().inv(temp_se3_Minv);
+
+	// do this only for a patch to compare
+    if(x<500 && y < 300){
+		invM_d = invM_d* temp_se3_Minv;
+		//std::cout << "Updating transform " << std::endl; //<< invM_d 
+	}
 
 	float depth_measure; unsigned int hashIdx; int noSteps;
 	Vector4f pt_camera_f; Vector3f point_e, point, direction; Vector3s blockPos;
