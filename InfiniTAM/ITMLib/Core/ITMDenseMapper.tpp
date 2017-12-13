@@ -68,8 +68,7 @@ void ITMDenseMapper<TVoxel,TIndex>::UpdateVisibleList(const ITMView *view, const
 	sceneRecoEngine->AllocateSceneFromDepth(scene, view, trackingState, renderState, true, resetVisibleList);
 }
 
-DQB(){
-	// Map<vector<x,y,z>, SE3Pose>
+void DQB(Map<vector<x,y,z>, SE3Pose>& mymap){
 	int radius = 2;
 	double distance ;
 	int k = 2;
@@ -89,10 +88,10 @@ DQB(){
 					blockPos = TO_SHORT_FLOOR3(point);
 					hashIdx = hashIndex(blockPos);
 
-					distance = ((x,y,z)-(i,j,k)).norm();
+					//distance = ((x,y,z)-(i,j,k)).norm();
 
-					dqb neighbour = distnace*dq_SE3toQuad(warp);
-					temp_dqb.push_back(neighbour);
+					//dqb neighbour = distnace*dq_SE3toQuad(warp);
+					//temp_dqb.push_back(neighbour);
 					
 
 					// check all nodes, find closest
@@ -107,7 +106,7 @@ DQB(){
 
 
 						// for each of these closest nodes, update voxel warp value
-						voxel(i,j,k) += distance*warp;
+						voxel(i,j,k) += distance*dq_SE3toQuad(warp);
 
 
 
