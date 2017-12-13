@@ -196,12 +196,6 @@ int ITMExtendedTracker_CPU::ComputeGandH_Depth_patch(float &f, float *nabla, flo
 		tmp3Dpoint.z = Z;
 		tmp3Dpoint.w = 1.0f;
 
-		//IM = KWarp*Pose*X
-		//Warp_Inv, Pose_Inv 
-		// transform to approxInvPose - T_current_to_world
-		//update the tmp3Dpoint 
-		// tmp3Dpoint_adjusted = approxInvWarp * tmp3Dpoint;
-		// tmp3Dpoint_adjusted.w = 1.0f;
 
 		tmp3Dpoint = approxInvWarp * approxInvPose * tmp3Dpoint;
 		tmp3Dpoint.w = 1.0f;
