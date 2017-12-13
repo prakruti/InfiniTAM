@@ -605,12 +605,13 @@ void ITMExtendedTracker::EstimateWarpField(ITMTrackingState *trackingState, cons
 	this->SetEvaluationData(trackingState, view);
 	this->PrepareForEvaluation();
 
-	//
 	float hessian_good[6 * 6];
 	float nabla_good[6];
 
 	for (int i = 0; i < 6 * 6; ++i) hessian_good[i] = 0.0f;
 	for (int i = 0; i < 6; ++i) nabla_good[i] = 0.0f;
+
+
 
 	// As a workaround to the fact that the SVM has not been updated to handle the Intensity+Depth tracking
 	// cache the last depth results and use them when evaluating the tracking quality
@@ -619,20 +620,28 @@ void ITMExtendedTracker::EstimateWarpField(ITMTrackingState *trackingState, cons
 	int noValidPoints_depth_good = 0;
 	memset(hessian_depth_good, 0, sizeof(hessian_depth_good));
 
-	
-
 	//coarse to fine assume one level only 
+	float *depth = viewHierarchyLevel_Depth->depth->GetData(MEMORYDEVICE_CPU);
+	Vector4f viewIntrinsics = viewHierarchyLevel_Depth->intrinsics;
 	Vector2i viewImageSize = viewHierarchyLevel_Depth->depth->noDims;
 
+
 	//calculate the ratio of the patch_size to the entire image size 
+	int patch_size_x = 5;
+	int patch_size_y = 5;
+
 	float size_ratio = (patch_size_x*patch_size_y)/(viewImageSize.x*viewImageSize.y);
 
 	for(int x = 0; x < viewImageSize.x; x=x+patch_size_x)
 	{
 		for(int y = 0; y < viewImageSize.y; y=y+patch_size_y)
 		{
+			ORUtils::SE3Pose * tmpWarp = new ORUtils::SE3Pose();
+
 			//for all the patch values calculate hessian, nabla
-			Vector2i location(x,y);
+			Vector3i location(x+patch_size_x/2,y+patch_size_y/2, 1);
+			int start_x = x;
+			int start_y = y;
 
 			//LM for the current patch 
 			//Set initial guess of warp field to identity 
@@ -642,7 +651,8 @@ void ITMExtendedTracker::EstimateWarpField(ITMTrackingState *trackingState, cons
 			Matrix4f approxInvPose = trackingState->pose_d->GetInvM();
 
 			//estimate the warp to be approxInvWarp at first
-			Matrix4f approxInvWarp = ORUtils::SE3Pose();
+			Matrix4f approxInvWarp;
+			approxInvWarp.setIdentity();
 
 			//We do need the pose of the previous frame - make sure scene pose is not updated
 			std::cout << "Inverse pose to world origin\n" << approxInvPose << std::endl;
@@ -652,7 +662,6 @@ void ITMExtendedTracker::EstimateWarpField(ITMTrackingState *trackingState, cons
 
 		for (int iterNo = 0; iterNo < noIterationsPerLevel[0]; iterNo++)
 		{
-
 			float hessian_depth[6 * 6];
 			float nabla_depth[6];
 			float f_depth = 0.f;
@@ -665,8 +674,8 @@ void ITMExtendedTracker::EstimateWarpField(ITMTrackingState *trackingState, cons
 			// evaluate error function and gradients
 			if (useDepth)
 			{
-				//change this so it only considers this patch
-				noValidPoints_depth = ComputeGandH_Depth(f_depth, nabla_depth, hessian_depth, approxInvPose, approxInvWarp, start_x, start_y, patch_size_x, patch_size_y);
+				//change this so it only considers this patch			
+				noValidPoints_depth = ComputeGandH_Depth_patch(f_depth, nabla_depth, hessian_depth, approxInvPose, approxInvWarp, start_x, start_y, patch_size_x, patch_size_y);
 
 				if (noValidPoints_depth > size_ratio*MIN_VALID_POINTS_DEPTH)
 				{
@@ -734,21 +743,44 @@ void ITMExtendedTracker::EstimateWarpField(ITMTrackingState *trackingState, cons
 			ComputeDelta(step, nabla_good, A, currentIterationType != TRACKER_ITERATION_BOTH);
 
 			ApplyDelta(approxInvWarp, step, approxInvWarp);
+
+
 			// trackingState->pose_d->SetInvM(approxInvPose);
-			trackingState->warp_field[location]->SetInvM(approxInvWarp);
+			// trackingState->warp_field[location]->SetInvM(approxInvWarp);
+			tmpWarp->SetInvM(approxInvWarp);
+			tmpWarp->Coerce();
+			approxInvWarp = tmpWarp->GetInvM();
 
 			//Coerce R to be a rotation matrix.
-			trackingState->pose_d->Coerce();
-			approxInvPose = trackingState->pose_d->GetInvM();
+			// trackingState->warp_field[location]->Coerce();
+			// approxInvWarp->Coerce()
+			// approxInvWarp = trackingState->warp_field[location]->GetInvM()
+			// approxInvPose = trackingState->pose_d->GetInvM();
 
 			// if step is small, assume it's going to decrease the error and finish
 			if (HasConverged(step)) break;
 		}
 
-			//save the estimate for warp at location x, y in the map 
-			trackingState->warp_field.insert(make_pair(location, estimate));
+			//calculate the world location 
+			// x, y, z
+			float z = depth[x+y*viewImageSize.x];
+			Vector4f tmp3Dpoint;
 
+			tmp3Dpoint.x = z * ((float(x) - viewIntrinsics.z) / viewIntrinsics.x);
+			tmp3Dpoint.y = z * ((float(y) - viewIntrinsics.w) / viewIntrinsics.y);
+			tmp3Dpoint.z = z;
+			tmp3Dpoint.w = 1.0f;
 
+			tmp3Dpoint = approxInvWarp*approxInvPose*tmp3Dpoint;
+
+			location.x = tmp3Dpoint.x/tmp3Dpoint.w;
+			location.y = tmp3Dpoint.y/tmp3Dpoint.w;
+			location.z = tmp3Dpoint.z/tmp3Dpoint.w;
+
+			//save the estimate for warp at location x, y, z in the map 
+			trackingState->warp_field.insert(std::make_pair(location, tmpWarp));
+
+			//
 			this->UpdatePoseQuality(noValidPoints_depth_good, hessian_depth_good, f_depth_good); 
 		}
 	}

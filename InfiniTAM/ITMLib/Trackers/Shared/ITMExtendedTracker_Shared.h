@@ -171,7 +171,7 @@ template<bool shortIteration, bool rotationOnly, bool useWeights>
 _CPU_AND_GPU_CODE_ inline bool computePerPointGH_exDepth_Ab_patch(THREADPTR(float) *A, THREADPTR(float) &b,
 	const THREADPTR(int) & x, const THREADPTR(int) & y, const CONSTPTR(float) &depth, THREADPTR(float) &depthWeight,
 	const CONSTPTR(Vector2i) & viewImageSize, const CONSTPTR(Vector4f) & viewIntrinsics, const CONSTPTR(Vector2i) & sceneImageSize,
-	const CONSTPTR(Vector4f) & sceneIntrinsics, const CONSTPTR(Matrix4f) & approxInvPose, const CONSTPTR(Matrix4f) & approxInvWarp, const CONSTPTR(Matrix4f) & scenePose, const CONSTPTR(Vector4f) *pointsMap,
+	const CONSTPTR(Vector4f) & sceneIntrinsics, const CONSTPTR(Matrix4f) & approxInvPose, const CONSTPTR(Matrix4f) & approxInvWarp, const CONSTPTR(Matrix4f) & scenePose, const CONSTPTR(Matrix4f) & sceneWarp, const CONSTPTR(Vector4f) *pointsMap,
 	const CONSTPTR(Vector4f) *normalsMap, float spaceThresh, float viewFrustum_min, float viewFrustum_max, float tukeyCutOff, int framesToSkip, int framesToWeight)
 {
 	// printf("computePerPointGH_exDepth_Ab \n");
@@ -197,10 +197,10 @@ _CPU_AND_GPU_CODE_ inline bool computePerPointGH_exDepth_Ab_patch(THREADPTR(floa
 	//Warp_Inv, Pose_Inv 
 	// transform to approxInvPose - T_current_to_world
 	//update the tmp3Dpoint 
-	tmp3Dpoint_adjusted = approxInvWarp * tmp3Dpoint;
-	tmp3Dpoint_adjusted.w = 1.0f;
+	// tmp3Dpoint_adjusted = approxInvWarp * tmp3Dpoint;
+	// tmp3Dpoint_adjusted.w = 1.0f;
 
-	tmp3Dpoint = approxInvPose * tmp3Dpoint_adjusted;
+	tmp3Dpoint = approxInvWarp * approxInvPose * tmp3Dpoint;
 	tmp3Dpoint.w = 1.0f;
 	//tmp 3D POINT is in world coordinates now.
 
@@ -210,7 +210,8 @@ _CPU_AND_GPU_CODE_ inline bool computePerPointGH_exDepth_Ab_patch(THREADPTR(floa
 	// tmp3Dpoint_reproj = scenePose*approxInvPose*P_current
 
 	//bring it to the prev frame
-	tmp3Dpoint_reproj = sceneWarp * scenePose * tmp3Dpoint;
+
+	tmp3Dpoint_reproj =  scenePose * sceneWarp *tmp3Dpoint;
 	if (tmp3Dpoint_reproj.z <= 0.0f) return false;
 	tmp2Dpoint.x = sceneIntrinsics.x * tmp3Dpoint_reproj.x / tmp3Dpoint_reproj.z + sceneIntrinsics.z;
 	tmp2Dpoint.y = sceneIntrinsics.y * tmp3Dpoint_reproj.y / tmp3Dpoint_reproj.z + sceneIntrinsics.w;
@@ -238,9 +239,9 @@ _CPU_AND_GPU_CODE_ inline bool computePerPointGH_exDepth_Ab_patch(THREADPTR(floa
 
 
 	//update the corr3Dnormal because the warp is in the middle just the rotation part of approxInvPose
-	Matrix4f approxInvPose_transpose = (approxInvPose).t();
-	Vector4f corr3Dnormal_adjusted(corr3Dnormal.x, corr3Dnormal.y, corr3Dnormal.z, 0.0f);
-	corr3Dnormal_adjusted = (approxInvPose_transpose)*corr3Dnormal_adjusted;
+	// Matrix4f approxInvPose_transpose = (approxInvPose).t();
+	// Vector4f corr3Dnormal_adjusted(corr3Dnormal.x, corr3Dnormal.y, corr3Dnormal.z, 0.0f);
+	// corr3Dnormal_adjusted = (approxInvPose_transpose)*corr3Dnormal_adjusted;
 
 
 	// points that are closer are trusted more
@@ -264,18 +265,18 @@ _CPU_AND_GPU_CODE_ inline bool computePerPointGH_exDepth_Ab_patch(THREADPTR(floa
 		if (rotationOnly)
 		{
 			//looks like a cross product 
-			A[0] = +tmp3Dpoint_adjusted.z * corr3Dnormal_adjusted.y - tmp3Dpoint_adjusted.y * corr3Dnormal_adjusted.z;
-			A[1] = -tmp3Dpoint_adjusted.z * corr3Dnormal_adjusted.x + tmp3Dpoint_adjusted.x * corr3Dnormal_adjusted.z;
-			A[2] = +tmp3Dpoint_adjusted.y * corr3Dnormal_adjusted.x - tmp3Dpoint_adjusted.x * corr3Dnormal_adjusted.y;
+			A[0] = +tmp3Dpoint.z * corr3Dnormal.y - tmp3Dpoint.y * corr3Dnormal.z;
+			A[1] = -tmp3Dpoint.z * corr3Dnormal.x + tmp3Dpoint.x * corr3Dnormal.z;
+			A[2] = +tmp3Dpoint.y * corr3Dnormal.x - tmp3Dpoint.x * corr3Dnormal.y;
 		}
-		else { A[0] = corr3Dnormal_adjusted.x; A[1] = corr3Dnormal_adjusted.y; A[2] = corr3Dnormal_adjusted.z; }
+		else { A[0] = corr3Dnormal.x; A[1] = corr3Dnormal.y; A[2] = corr3Dnormal.z; }
 	}
 	else
 	{
-		A[0] = +tmp3Dpoint_adjusted.z * corr3Dnormal_adjusted.y - tmp3Dpoint_adjusted.y * corr3Dnormal_adjusted.z;
-		A[1] = -tmp3Dpoint_adjusted.z * corr3Dnormal_adjusted.x + tmp3Dpoint_adjusted.x * corr3Dnormal_adjusted.z;
-		A[2] = +tmp3Dpoint_adjusted.y * corr3Dnormal_adjusted.x - tmp3Dpoint_adjusted.x * corr3Dnormal_adjusted.y;
-		A[!shortIteration ? 3 : 0] = corr3Dnormal_adjusted.x; A[!shortIteration ? 4 : 1] = corr3Dnormal_adjusted.y; A[!shortIteration ? 5 : 2] = corr3Dnormal_adjusted.z;
+		A[0] = +tmp3Dpoint.z * corr3Dnormal.y - tmp3Dpoint.y * corr3Dnormal.z;
+		A[1] = -tmp3Dpoint.z * corr3Dnormal.x + tmp3Dpoint.x * corr3Dnormal.z;
+		A[2] = +tmp3Dpoint.y * corr3Dnormal.x - tmp3Dpoint.x * corr3Dnormal.y;
+		A[!shortIteration ? 3 : 0] = corr3Dnormal.x; A[!shortIteration ? 4 : 1] = corr3Dnormal.y; A[!shortIteration ? 5 : 2] = corr3Dnormal.z;
 	}
 
 	return true;
@@ -473,15 +474,15 @@ _CPU_AND_GPU_CODE_ inline bool computePerPointGH_exDepth(THREADPTR(float) *local
 template<bool shortIteration, bool rotationOnly, bool useWeights>
 _CPU_AND_GPU_CODE_ inline bool computePerPointGH_exDepth_patch(THREADPTR(float) *localNabla, THREADPTR(float) *localHessian, THREADPTR(float) &localF,
 	const THREADPTR(int) & x, const THREADPTR(int) & y, const CONSTPTR(float) &depth, THREADPTR(float) &depthWeight, CONSTPTR(Vector2i) & viewImageSize, const CONSTPTR(Vector4f) & viewIntrinsics,
-	const CONSTPTR(Vector2i) & sceneImageSize, const CONSTPTR(Vector4f) & sceneIntrinsics, const CONSTPTR(Matrix4f) & approxInvPose, const CONSTPTR(Matrix4f) & approxInvWarp, const CONSTPTR(Matrix4f) & scenePose,
-	const CONSTPTR(Vector4f) *pointsMap, const CONSTPTR(Vector4f) *normalsMap, float spaceThresh, float viewFrustum_min, float viewFrustum_max, float tukeyCutOff, int framesToSkip, int framesToWeight)
+	const CONSTPTR(Vector2i) & sceneImageSize, const CONSTPTR(Vector4f) & sceneIntrinsics, const CONSTPTR(Matrix4f) & approxInvPose, const CONSTPTR(Matrix4f) & approxInvWarp, const CONSTPTR(Matrix4f) & scenePose, 
+	const CONSTPTR(Matrix4f) & sceneWarp, const CONSTPTR(Vector4f) *pointsMap, const CONSTPTR(Vector4f) *normalsMap, float spaceThresh, float viewFrustum_min, float viewFrustum_max, float tukeyCutOff, int framesToSkip, int framesToWeight)
 {
 	const int noPara = shortIteration ? 3 : 6;
 	float A[noPara];
 	float b;
 
 	bool ret = computePerPointGH_exDepth_Ab_patch<shortIteration, rotationOnly, useWeights>(A, b, x, y, depth, depthWeight, viewImageSize, viewIntrinsics, sceneImageSize, sceneIntrinsics,
-		approxInvPose, approxInvWarp, scenePose, pointsMap, normalsMap, spaceThresh, viewFrustum_min, viewFrustum_max, tukeyCutOff, framesToSkip, framesToWeight);
+		approxInvPose, approxInvWarp, scenePose, sceneWarp, pointsMap, normalsMap, spaceThresh, viewFrustum_min, viewFrustum_max, tukeyCutOff, framesToSkip, framesToWeight);
 
 	if (!ret) return false;
 

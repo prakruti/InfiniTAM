@@ -174,6 +174,10 @@ int ITMExtendedTracker_CPU::ComputeGandH_Depth_patch(float &f, float *nabla, flo
 	memset(sumHessian, 0, sizeof(float) * noParaSQ);
 	memset(sumNabla, 0, sizeof(float) * noPara);
 
+	//How can I access the warp of a voxel when I don't have access to the map? 
+
+	Matrix4f sceneWarp = Matrix4f();
+
 	for (int y = start_y; y < patch_size_y; y++) for (int x = start_x; x < patch_size_x; x++)
 	{
 		float localHessian[6 + 5 + 4 + 3 + 2 + 1], localNabla[6], localF = 0;
@@ -185,23 +189,43 @@ int ITMExtendedTracker_CPU::ComputeGandH_Depth_patch(float &f, float *nabla, flo
 
 		float depthWeight;
 
+		Vector4f tmp3Dpoint;
+		float Z = depth[x + y * viewImageSize.x];
+		tmp3Dpoint.x = Z * ((float(x) - viewIntrinsics.z) / viewIntrinsics.x);
+		tmp3Dpoint.y = Z * ((float(y) - viewIntrinsics.w) / viewIntrinsics.y);
+		tmp3Dpoint.z = Z;
+		tmp3Dpoint.w = 1.0f;
+
+		//IM = KWarp*Pose*X
+		//Warp_Inv, Pose_Inv 
+		// transform to approxInvPose - T_current_to_world
+		//update the tmp3Dpoint 
+		// tmp3Dpoint_adjusted = approxInvWarp * tmp3Dpoint;
+		// tmp3Dpoint_adjusted.w = 1.0f;
+
+		tmp3Dpoint = approxInvWarp * approxInvPose * tmp3Dpoint;
+		tmp3Dpoint.w = 1.0f;
+
+		// sceneWarp = getInterpolatedWarp(tmp3Dpoint, trackingState->prev_warp_field);
+
+
 		if (framesProcessed < 100)
 		{
 			switch (currentIterationType)
 			{
 			case TRACKER_ITERATION_ROTATION:
 				isValidPoint = computePerPointGH_exDepth_patch<true, true, false>(localNabla, localHessian, localF, x, y, depth[x + y * viewImageSize.x], depthWeight,
-					viewImageSize, viewIntrinsics, sceneImageSize, sceneIntrinsics, approxInvPose, approxInvWarp, scenePose, pointsMap, normalsMap, spaceThresh[currentLevelId],
+					viewImageSize, viewIntrinsics, sceneImageSize, sceneIntrinsics, approxInvPose, approxInvWarp, scenePose, sceneWarp, pointsMap, normalsMap, spaceThresh[currentLevelId],
 					viewFrustum_min, viewFrustum_max, tukeyCutOff, framesToSkip, framesToWeight);
 				break;
 			case TRACKER_ITERATION_TRANSLATION:
 				isValidPoint = computePerPointGH_exDepth_patch<true, false, false>(localNabla, localHessian, localF, x, y, depth[x + y * viewImageSize.x], depthWeight,
-					viewImageSize, viewIntrinsics, sceneImageSize, sceneIntrinsics, approxInvPose, approxInvWarp, scenePose, pointsMap, normalsMap, spaceThresh[currentLevelId],
+					viewImageSize, viewIntrinsics, sceneImageSize, sceneIntrinsics, approxInvPose, approxInvWarp, scenePose, sceneWarp, pointsMap, normalsMap, spaceThresh[currentLevelId],
 					viewFrustum_min, viewFrustum_max, tukeyCutOff, framesToSkip, framesToWeight);
 				break;
 			case TRACKER_ITERATION_BOTH:
 				isValidPoint = computePerPointGH_exDepth_patch<false, false, false>(localNabla, localHessian, localF, x, y, depth[x + y * viewImageSize.x], depthWeight,
-					viewImageSize, viewIntrinsics, sceneImageSize, sceneIntrinsics, approxInvPose, approxInvWarp, scenePose, pointsMap, normalsMap, spaceThresh[currentLevelId],
+					viewImageSize, viewIntrinsics, sceneImageSize, sceneIntrinsics, approxInvPose, approxInvWarp, scenePose, sceneWarp, pointsMap, normalsMap, spaceThresh[currentLevelId],
 					viewFrustum_min, viewFrustum_max, tukeyCutOff, framesToSkip, framesToWeight);
 				break;
 			default:
@@ -215,17 +239,17 @@ int ITMExtendedTracker_CPU::ComputeGandH_Depth_patch(float &f, float *nabla, flo
 			{
 			case TRACKER_ITERATION_ROTATION:
 				isValidPoint = computePerPointGH_exDepth_patch<true, true, true>(localNabla, localHessian, localF, x, y, depth[x + y * viewImageSize.x], depthWeight,
-					viewImageSize, viewIntrinsics, sceneImageSize, sceneIntrinsics, approxInvPose, approxInvWarp, scenePose, pointsMap, normalsMap, spaceThresh[currentLevelId],
+					viewImageSize, viewIntrinsics, sceneImageSize, sceneIntrinsics, approxInvPose, approxInvWarp, scenePose, sceneWarp, pointsMap, normalsMap, spaceThresh[currentLevelId],
 					viewFrustum_min, viewFrustum_max, tukeyCutOff, framesToSkip, framesToWeight);
 				break;
 			case TRACKER_ITERATION_TRANSLATION:
 				isValidPoint = computePerPointGH_exDepth_patch<true, false, true>(localNabla, localHessian, localF, x, y, depth[x + y * viewImageSize.x], depthWeight,
-					viewImageSize, viewIntrinsics, sceneImageSize, sceneIntrinsics, approxInvPose, approxInvWarp, scenePose, pointsMap, normalsMap, spaceThresh[currentLevelId],
+					viewImageSize, viewIntrinsics, sceneImageSize, sceneIntrinsics, approxInvPose, approxInvWarp, scenePose, sceneWarp, pointsMap, normalsMap, spaceThresh[currentLevelId],
 					viewFrustum_min, viewFrustum_max, tukeyCutOff, framesToSkip, framesToWeight);
 				break;
 			case TRACKER_ITERATION_BOTH:
 				isValidPoint = computePerPointGH_exDepth_patch<false, false, true>(localNabla, localHessian, localF, x, y, depth[x + y * viewImageSize.x], depthWeight,
-					viewImageSize, viewIntrinsics, sceneImageSize, sceneIntrinsics, approxInvPose, approxInvWarp, scenePose, pointsMap, normalsMap, spaceThresh[currentLevelId],
+					viewImageSize, viewIntrinsics, sceneImageSize, sceneIntrinsics, approxInvPose, approxInvWarp, scenePose, sceneWarp, pointsMap, normalsMap, spaceThresh[currentLevelId],
 					viewFrustum_min, viewFrustum_max, tukeyCutOff, framesToSkip, framesToWeight);
 				break;
 			default:
