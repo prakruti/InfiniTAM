@@ -31,6 +31,7 @@ PoseGraph.cpp
 SlamGraph.cpp
 SlamGraphErrorFunction.cpp
 QuaternionHelpers.cpp
+DualQuaternionHelpers.cpp
 )
 
 SET(headers
@@ -44,6 +45,7 @@ MatrixWrapper.h
 ParameterIndex.h
 PoseGraph.h
 QuaternionHelpers.h
+DualQuaternionHelpers.h
 SlamGraph.h
 SlamGraphErrorFunction.h
 SparseBlockMatrix.h
