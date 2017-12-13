@@ -103,6 +103,16 @@ _CPU_AND_GPU_CODE_ inline bool castRay(DEVICEPTR(Vector4f) &pt_out, DEVICEPTR(uc
 	int x, int y, const CONSTPTR(TVoxel) *voxelData, const CONSTPTR(typename TIndex::IndexData) *voxelIndex, 
 	Matrix4f invM, Vector4f invProjParams, float oneOverVoxelSize, float mu, const CONSTPTR(Vector2f) & viewFrustum_minmax)
 {
+
+	// Apply a warp to invM, get this from trackingstate->warp map's blending 
+    ORUtils::SE3Pose temp_se3;
+    temp_se3.SetFrom(0.0,0.0,0.0,0.0,0.0,0.0);
+    Matrix4f temp_se3_Minv;
+	temp_se3.GetM().inv(temp_se3_Minv);
+
+	invM = invM * temp_se3_Minv;
+
+
 	Vector4f pt_camera_f; Vector3f pt_block_s, pt_block_e, rayDirection, pt_result;
 	bool pt_found;
 	int vmIndex;
@@ -359,6 +369,7 @@ _CPU_AND_GPU_CODE_ inline void processPixelICP(DEVICEPTR(Vector4f) *pointsMap, D
 	const CONSTPTR(Vector4f) *pointsRay, const THREADPTR(Vector2i) &imgSize, const THREADPTR(int) &x, const THREADPTR(int) &y, float voxelSize,
 	const THREADPTR(Vector3f) &lightSource)
 {
+
 	Vector3f outNormal;
 	float angle;
 
