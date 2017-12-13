@@ -218,8 +218,9 @@ void dq_op_mul( dq_t PQ, const dq_t P, const dq_t Q )
 
 
 
-void dq_se3_to_dquat( dq_t O, const ORUtils::SE3Pose in_SE3)
+dq_t dq_se3_to_dquat(  const ORUtils::SE3Pose in_SE3)
 {
+   dq_t O;  
    dq_t QR, QT;
    Matrix3<float> R1 = in_SE3.GetR();
    Vector3<float> t1 = in_SE3.GetT();
@@ -244,6 +245,7 @@ void dq_se3_to_dquat( dq_t O, const ORUtils::SE3Pose in_SE3)
    dq_cr_rotation_matrix( QR, R );
    dq_cr_translation_vector( QT, t );
    dq_op_mul( O, QT, QR );
+   return O;
 }
 
 
@@ -305,42 +307,13 @@ ORUtils::SE3Pose dq_dquat_to_se3(const dq_t Q )
 }
 
 
-void dq_op_extract( double R[3][3], double d[3], const dq_t Q )
+dq_t dq_op_add(  const dq_t P, const dq_t Q )
 {
-#if DQ_CHECK
-   double t;
-#endif /* DQ_CHECK */
-
-   /* Formula for extracting the orthogonal matrix of the rotation. */
-   /*C  R */
-   R[0][0] = Q[0]*Q[0] + Q[1]*Q[1] - Q[2]*Q[2] - Q[3]*Q[3];
-   R[0][1] = 2.*Q[1]*Q[2] - 2.*Q[0]*Q[3];
-   R[0][2] = 2.*Q[1]*Q[3] + 2.*Q[0]*Q[2];
-   R[1][0] = 2.*Q[1]*Q[2] + 2.*Q[0]*Q[3];
-   R[1][1] = Q[0]*Q[0] - Q[1]*Q[1] + Q[2]*Q[2] - Q[3]*Q[3];
-   R[1][2] = 2.*Q[2]*Q[3] - 2.*Q[0]*Q[1];
-   R[2][0] = 2.*Q[1]*Q[3] - 2.*Q[0]*Q[2];
-   R[2][1] = 2.*Q[2]*Q[3] + 2.*Q[0]*Q[1];
-   R[2][2] = Q[0]*Q[0] - Q[1]*Q[1] - Q[2]*Q[2] + Q[3]*Q[3];
-
-   /* Extraction of displacement.
-    * q = r + d e
-    * d r* = 0 + x/2 i + y/2 j + z/2 k
-    */
-#if DQ_CHECK
-   t =  Q[0]*Q[7] + Q[1]*Q[4] + Q[2]*Q[5] + Q[3]*Q[6];
-   assert( fabs( t ) < DQ_PRECISION );
-#endif /* DQ_CHECK */
-   d[0] = 2.*( Q[0]*Q[4] - Q[1]*Q[7] + Q[2]*Q[6] - Q[3]*Q[5] );
-   d[1] = 2.*( Q[0]*Q[5] - Q[2]*Q[7] - Q[1]*Q[6] + Q[3]*Q[4] );
-   d[2] = 2.*( Q[0]*Q[6] - Q[3]*Q[7] + Q[1]*Q[5] - Q[2]*Q[4] );
-}
-
-void dq_op_add( dq_t O, const dq_t P, const dq_t Q )
-{
+   dq_t O;
    int i;
    for (i=0; i<8; i++)
       O[i] = P[i] + Q[i];
+    return O ;
 }
 
 void dq_op_norm2( double *real, double *dual, const dq_t Q )
@@ -350,18 +323,6 @@ void dq_op_norm2( double *real, double *dual, const dq_t Q )
 }
 
 
-void dq_cr_homo( dq_t O, double R[3][3], const double d[3] )
-{
-   dq_t QR, QT;
-
-#ifdef DQ_CHECK
-   assert( fabs(mat3_det(R) - 1.) < DQ_PRECISION );
-#endif /* DQ_CHECK */
-
-   dq_cr_rotation_matrix( QR, R );
-   dq_cr_translation_vector( QT, d );
-   dq_op_mul( O, QT, QR );
-}
 
 
 
