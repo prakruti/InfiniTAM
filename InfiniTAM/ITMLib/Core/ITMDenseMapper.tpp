@@ -32,6 +32,9 @@ void ITMDenseMapper<TVoxel,TIndex>::ResetScene(ITMScene<TVoxel,TIndex> *scene) c
 template<class TVoxel, class TIndex>
 void ITMDenseMapper<TVoxel,TIndex>::ProcessFrame(const ITMView *view, const ITMTrackingState *trackingState, ITMScene<TVoxel,TIndex> *scene, ITMRenderState *renderState)
 {
+	//Interpolation 
+	
+	
 	// allocation
 	sceneRecoEngine->AllocateSceneFromDepth(scene, view, trackingState, renderState);
 

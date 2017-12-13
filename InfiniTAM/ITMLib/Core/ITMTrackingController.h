@@ -25,7 +25,7 @@ namespace ITMLib
 			if (!tracker->requiresPointCloudRendering() || trackingState->age_pointCloud != -1)
 			{
 				tracker->TrackCamera(trackingState, view);
-				// tracker->EstimateWarpField(trackingState, view);
+				tracker->EstimateWarpField(trackingState, view);
 			}
 
 		}

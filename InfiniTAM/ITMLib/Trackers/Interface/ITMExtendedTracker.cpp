@@ -184,7 +184,7 @@ void ITMExtendedTracker::SetEvaluationData(ITMTrackingState *trackingState, cons
 	// Pointclouds are needed only when the depth tracker is enabled
 	if (useDepth)
 	{
-		printf("Setting sceneHierarchy - points and normals\n");
+		// printf("Setting sceneHierarchy - points and normals\n");
 		sceneHierarchy->GetLevel(0)->intrinsics = view->calib.intrinsics_d.projectionParamsSimple.all;
 		sceneHierarchy->GetLevel(0)->pointsMap = trackingState->pointCloud->locations;
 		sceneHierarchy->GetLevel(0)->normalsMap = trackingState->pointCloud->colours;
@@ -275,7 +275,7 @@ void ITMExtendedTracker::SetEvaluationParams(int levelId)
 	{
 		// During the optimization, every level of the depth frame pyramid is matched to the full resolution raycast
 		sceneHierarchyLevel_Depth = sceneHierarchy->GetLevel(0);
-		printf("Set sceneHierarchy depth \n");
+		// printf("Set sceneHierarchy depth \n");
 	}
 
 	if (useColour)
@@ -412,7 +412,7 @@ void ITMExtendedTracker::UpdatePoseQuality(int noValidPoints_old, float *hessian
 
 void ITMExtendedTracker::TrackCamera(ITMTrackingState *trackingState, const ITMView *view)
 {
-	printf("Inside Extended Tracker \n");
+	// printf("Inside Extended Tracker \n");
 	if (trackingState->age_pointCloud >= 0) trackingState->framesProcessed++;
 	else trackingState->framesProcessed = 0;
 
@@ -443,7 +443,7 @@ void ITMExtendedTracker::TrackCamera(ITMTrackingState *trackingState, const ITMV
 
 		Matrix4f approxInvPose = trackingState->pose_d->GetInvM();
 
-		std::cout << "Inverse pose to world origin\n" << approxInvPose << std::endl;
+		// std::cout << "Inverse pose to world origin\n" << approxInvPose << std::endl;
 		ORUtils::SE3Pose lastKnownGoodPose(*(trackingState->pose_d));
 
 		float f_old = std::numeric_limits<float>::max();
@@ -533,7 +533,7 @@ void ITMExtendedTracker::TrackCamera(ITMTrackingState *trackingState, const ITMV
 			}
 			else if (useDepth)
 			{
-				printf("Using Depth to Track camera\n");
+				// printf("Using Depth to Track camera\n");
 				noValidPoints_new = noValidPoints_depth;
 				f_new = f_depth;
 				memcpy(nabla_new, nabla_depth, sizeof(nabla_depth));
@@ -597,7 +597,7 @@ void ITMExtendedTracker::TrackCamera(ITMTrackingState *trackingState, const ITMV
 
 void ITMExtendedTracker::EstimateWarpField(ITMTrackingState *trackingState, const ITMView *view)
 {
-	printf("Inside Warp Field Estimation\n");
+	// printf("Inside Warp Field Estimation\n");
 	if (trackingState->age_pointCloud >= 0) trackingState->framesProcessed++;
 	else trackingState->framesProcessed = 0;
 
@@ -625,21 +625,35 @@ void ITMExtendedTracker::EstimateWarpField(ITMTrackingState *trackingState, cons
 	Vector4f viewIntrinsics = viewHierarchyLevel_Depth->intrinsics;
 	Vector2i viewImageSize = viewHierarchyLevel_Depth->depth->noDims;
 
+	// std::cout << viewImageSize << std::endl;
 
 	//calculate the ratio of the patch_size to the entire image size 
-	int patch_size_x = 5;
-	int patch_size_y = 5;
+	int patch_size_x = 20;
+	int patch_size_y = 20;
 
 	float size_ratio = (patch_size_x*patch_size_y)/(viewImageSize.x*viewImageSize.y);
 
+	float hessian_new[6 * 6];
+	float nabla_new[6];
+	float f_new = 0.f;
+	int noValidPoints_new = 0;
+#ifdef WITH_OPENMP
+	#pragma omp parallel for
+#endif
 	for(int x = 0; x < viewImageSize.x; x=x+patch_size_x)
 	{
 		for(int y = 0; y < viewImageSize.y; y=y+patch_size_y)
 		{
+
+			float depth_val = depth[x+y*viewImageSize.x];
+
+			if(depth_val <= 1e-8f) continue;
+
+			//Check if this causes a memory leak?
 			ORUtils::SE3Pose * tmpWarp = new ORUtils::SE3Pose();
 
 			//for all the patch values calculate hessian, nabla
-			Vector3i location(x+patch_size_x/2,y+patch_size_y/2, 1);
+			Vector3f location(x+patch_size_x/2,y+patch_size_y/2, 1);
 			int start_x = x;
 			int start_y = y;
 
@@ -650,15 +664,16 @@ void ITMExtendedTracker::EstimateWarpField(ITMTrackingState *trackingState, cons
 			//Contains the camera pose of the current frame 
 			Matrix4f approxInvPose = trackingState->pose_d->GetInvM();
 
-			//estimate the warp to be approxInvWarp at first
+			//estimate the warp to be identity at first
 			Matrix4f approxInvWarp;
 			approxInvWarp.setIdentity();
 
 			//We do need the pose of the previous frame - make sure scene pose is not updated
-			std::cout << "Inverse pose to world origin\n" << approxInvPose << std::endl;
+			// std::cout << "Inverse pose to world origin\n" << approxInvPose << std::endl;
 
 			float f_old = std::numeric_limits<float>::max();
 			float lambda = 1.0;
+			// std::cout << " NumIterations : " << noIterationsPerLevel[0] << std::endl;
 
 		for (int iterNo = 0; iterNo < noIterationsPerLevel[0]; iterNo++)
 		{
@@ -675,8 +690,10 @@ void ITMExtendedTracker::EstimateWarpField(ITMTrackingState *trackingState, cons
 			if (useDepth)
 			{
 				//change this so it only considers this patch			
-				noValidPoints_depth = ComputeGandH_Depth_patch(f_depth, nabla_depth, hessian_depth, approxInvPose, approxInvWarp, start_x, start_y, patch_size_x, patch_size_y);
+				noValidPoints_depth = ComputeGandH_Depth_patch(f_depth, nabla_depth, hessian_depth, approxInvPose, approxInvWarp, start_x, start_y, patch_size_x, patch_size_y, trackingState);
+				// printf("x = %d, y = %d\n", x, y);
 
+				// printf("noValidPoints_depth = %d\n", noValidPoints_depth);
 				if (noValidPoints_depth > size_ratio*MIN_VALID_POINTS_DEPTH)
 				{
 					// Normalize nabla and hessian
@@ -690,18 +707,15 @@ void ITMExtendedTracker::EstimateWarpField(ITMTrackingState *trackingState, cons
 				}
 			}
 
-			float hessian_new[6 * 6];
-			float nabla_new[6];
-			float f_new = 0.f;
-			int noValidPoints_new = 0;
 
 			if(useDepth)
 			{
-				printf("Using Depth to Track camera\n");
+				// printf("Using Depth to Track camera\n");
 				noValidPoints_new = noValidPoints_depth;
 				f_new = f_depth;
 				memcpy(nabla_new, nabla_depth, sizeof(nabla_depth));
 				memcpy(hessian_new, hessian_depth, sizeof(hessian_depth));
+				// printf("Using Depth to Track camera\n");
 			}
 			else
 			{
@@ -712,16 +726,16 @@ void ITMExtendedTracker::EstimateWarpField(ITMTrackingState *trackingState, cons
 			if ((noValidPoints_new <= 0) || (f_new >= f_old))
 			{
 				// trackingState->pose_d->SetFrom(&lastKnownGoodPose);
-				trackingState->warp_field[location]->SetFrom(&lastKnownGoodPose);
+				tmpWarp->SetFrom(&lastKnownGoodPose);
 
 				//don't update this. update the approxInvWarp 
 				// approxInvPose = trackingState->pose_d->GetInvM();
-				approxInvWarp = trackingState->warp_field[location]->GetInvM();
+				approxInvWarp = tmpWarp->GetInvM();
 				lambda *= 10.0f;
 			}
 			else
 			{
-				lastKnownGoodPose.SetFrom(trackingState->warp_field[location]);
+				lastKnownGoodPose.SetFrom(tmpWarp);
 				f_old = f_new;
 
 				for (int i = 0; i < 6 * 6; ++i) hessian_good[i] = hessian_new[i];
@@ -744,20 +758,14 @@ void ITMExtendedTracker::EstimateWarpField(ITMTrackingState *trackingState, cons
 
 			ApplyDelta(approxInvWarp, step, approxInvWarp);
 
-
-			// trackingState->pose_d->SetInvM(approxInvPose);
-			// trackingState->warp_field[location]->SetInvM(approxInvWarp);
 			tmpWarp->SetInvM(approxInvWarp);
 			tmpWarp->Coerce();
 			approxInvWarp = tmpWarp->GetInvM();
 
-			//Coerce R to be a rotation matrix.
-			// trackingState->warp_field[location]->Coerce();
-			// approxInvWarp->Coerce()
-			// approxInvWarp = trackingState->warp_field[location]->GetInvM()
-			// approxInvPose = trackingState->pose_d->GetInvM();
-
 			// if step is small, assume it's going to decrease the error and finish
+			// std::cout << "HERE!!!\n";
+			//  std::cout << approxInvWarp << std::endl;
+
 			if (HasConverged(step)) break;
 		}
 
@@ -778,10 +786,12 @@ void ITMExtendedTracker::EstimateWarpField(ITMTrackingState *trackingState, cons
 			location.z = tmp3Dpoint.z/tmp3Dpoint.w;
 
 			//save the estimate for warp at location x, y, z in the map 
-			trackingState->warp_field.insert(std::make_pair(location, tmpWarp));
+			trackingState->warp_field_XYZ.insert(std::make_pair(location, tmpWarp));
+			trackingState->warp_field_xy.insert(std::make_pair(Vector2f(x+(patch_size_x/2),y+(patch_size_y/2)), tmpWarp));
 
+			// std::cout << approxInvWarp << std::endl;
 			//
-			this->UpdatePoseQuality(noValidPoints_depth_good, hessian_depth_good, f_depth_good); 
+			// this->UpdatePoseQuality(noValidPoints_depth_good, hessian_depth_good, f_depth_good); 
 		}
 	}
 

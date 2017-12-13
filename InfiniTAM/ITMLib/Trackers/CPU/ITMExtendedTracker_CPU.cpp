@@ -2,6 +2,7 @@
 
 #include "ITMExtendedTracker_CPU.h"
 #include "../Shared/ITMExtendedTracker_Shared.h"
+#include <iostream> 
 
 using namespace ITMLib;
 
@@ -151,7 +152,7 @@ int ITMExtendedTracker_CPU::ComputeGandH_Depth(float &f, float *nabla, float *he
 	return noValidPoints;
 }
 
-int ITMExtendedTracker_CPU::ComputeGandH_Depth_patch(float &f, float *nabla, float *hessian, Matrix4f approxInvPose, Matrix4f approxInvWarp, int start_x, int start_y, int patch_size_x, int patch_size_y)
+int ITMExtendedTracker_CPU::ComputeGandH_Depth_patch(float &f, float *nabla, float *hessian, Matrix4f approxInvPose, Matrix4f approxInvWarp, int start_x, int start_y, int patch_size_x, int patch_size_y, ITMTrackingState *trackingState)
 {
 	Vector4f *pointsMap = sceneHierarchyLevel_Depth->pointsMap->GetData(MEMORYDEVICE_CPU);
 	Vector4f *normalsMap = sceneHierarchyLevel_Depth->normalsMap->GetData(MEMORYDEVICE_CPU);
@@ -161,6 +162,7 @@ int ITMExtendedTracker_CPU::ComputeGandH_Depth_patch(float &f, float *nabla, flo
 	float *depth = viewHierarchyLevel_Depth->depth->GetData(MEMORYDEVICE_CPU);
 	Vector4f viewIntrinsics = viewHierarchyLevel_Depth->intrinsics;
 	Vector2i viewImageSize = viewHierarchyLevel_Depth->depth->noDims;
+
 
 	if (currentIterationType == TRACKER_ITERATION_NONE) return 0;
 
@@ -176,9 +178,10 @@ int ITMExtendedTracker_CPU::ComputeGandH_Depth_patch(float &f, float *nabla, flo
 
 	//How can I access the warp of a voxel when I don't have access to the map? 
 
-	Matrix4f sceneWarp = Matrix4f();
+	Matrix4f sceneWarp;
+	sceneWarp.setIdentity();
 
-	for (int y = start_y; y < patch_size_y; y++) for (int x = start_x; x < patch_size_x; x++)
+	for (int y = start_y; y < start_y+ patch_size_y; y++) for (int x = start_x; x < start_x + patch_size_x; x++)
 	{
 		float localHessian[6 + 5 + 4 + 3 + 2 + 1], localNabla[6], localF = 0;
 
@@ -200,8 +203,32 @@ int ITMExtendedTracker_CPU::ComputeGandH_Depth_patch(float &f, float *nabla, flo
 		tmp3Dpoint = approxInvWarp * approxInvPose * tmp3Dpoint;
 		tmp3Dpoint.w = 1.0f;
 
-		// sceneWarp = getInterpolatedWarp(tmp3Dpoint, trackingState->prev_warp_field);
+		//tmp3Dpoint is the point in world frame at t=0
 
+		//Interpolate the warp at this point using the warps at node locations
+		std::map<Vector3f, ORUtils::SE3Pose *>::iterator it;
+		float min_dist = std::numeric_limits<float>::max();
+		float threshold = 10;
+
+		for(auto it=trackingState->prev_warp_field_XYZ.begin(); it!=trackingState->prev_warp_field_XYZ.end(); it++)
+		{
+			Vector3f node_location = it->first;
+			Vector3f ptDiff;
+			ptDiff.x = tmp3Dpoint.x - node_location.x;
+			ptDiff.y = tmp3Dpoint.y - node_location.y;
+			ptDiff.z = tmp3Dpoint.z - node_location.z;
+
+			float dist = ptDiff.x*ptDiff.x + ptDiff.y*ptDiff.y + ptDiff.z*ptDiff.z;
+
+			if((dist< min_dist) && min_dist < threshold)
+			{
+				sceneWarp = (it->second)->GetM();
+			}
+		}
+		
+		// sceneWarp = getInterpolatedWarp(tmp3Dpoint, trackingState->prev_warp_field);
+		// std::cout << "Scene Warp\n";
+		// std::cout << sceneWarp << std::endl;
 
 		if (framesProcessed < 100)
 		{

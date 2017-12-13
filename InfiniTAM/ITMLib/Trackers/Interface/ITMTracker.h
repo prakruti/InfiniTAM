@@ -24,7 +24,7 @@ namespace ITMLib
 		    currently stored as an attribute in trackingState.
 		*/
 		virtual void TrackCamera(ITMTrackingState *trackingState, const ITMView *view) = 0;
-
+		virtual void EstimateWarpField(ITMTrackingState *trackingState, const ITMView *view)=0;
 		/** Updates the initial pose of the depth camera in the scene.
 		    This can be used to make the scene up vector correspond
 		    to the real world's up direction.

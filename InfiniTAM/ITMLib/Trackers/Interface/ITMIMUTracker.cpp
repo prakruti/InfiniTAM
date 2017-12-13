@@ -20,3 +20,7 @@ void ITMIMUTracker::TrackCamera(ITMTrackingState *trackingState, const ITMView *
 
 	trackingState->pose_d->SetR(calibrator->GetDifferentialRotationChange() * trackingState->pose_d->GetR());
 }
+void ITMIMUTracker::EstimateWarpField(ITMTrackingState *trackingState, const ITMView *view)
+{
+	return;
+}

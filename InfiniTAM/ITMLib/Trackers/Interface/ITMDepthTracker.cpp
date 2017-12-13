@@ -293,3 +293,8 @@ void ITMDepthTracker::TrackCamera(ITMTrackingState *trackingState, const ITMView
 
 	this->UpdatePoseQuality(noValidPoints_old, hessian_good, f_old);
 }
+
+void ITMDepthTracker::EstimateWarpField(ITMTrackingState *trackingState, const ITMView *view)
+{
+	return;
+}

@@ -74,6 +74,7 @@ namespace ITMLib
 		void ApplyDelta(const ORUtils::SE3Pose & para_old, const float *delta, ORUtils::SE3Pose & para_new) const;
 
 		void TrackCamera(ITMTrackingState *trackingState, const ITMView *view);
+		void EstimateWarpField(ITMTrackingState *trackingState, const ITMView *view);
 
 		bool requiresColourRendering() const { return true; }
 		bool requiresDepthReliability() const { return false; }

@@ -253,6 +253,18 @@ ITMTrackingState::TrackingResult ITMBasicEngine<TVoxel,TIndex>::ProcessFrame(ITM
 	// tracking
 	ORUtils::SE3Pose oldPose(*(trackingState->pose_d));
 	if (trackingActive) trackingController->Track(trackingState, view);
+	// std::cout << "Finished Tracking\n";
+
+	// //Copy the new warp field to old 	
+	//Calculate interpolated list for x and y and store in prev_warp_fiel
+	trackingState->prev_warp_field_XYZ = trackingState->warp_field_XYZ;
+
+	//Calculate 3D interpolation 
+
+	//Clear the current warp_field_estimation
+	trackingState->warp_field_XYZ.clear();
+	trackingState->warp_field_xy.clear();
+
 
 	ITMTrackingState::TrackingResult trackerResult = ITMTrackingState::TRACKING_GOOD;
 	switch (settings->behaviourOnFailure) {

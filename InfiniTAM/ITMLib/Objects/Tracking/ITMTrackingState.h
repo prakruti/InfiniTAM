@@ -39,8 +39,10 @@ namespace ITMLib
 
 		//TODO (@pgogia) : Add the warp field term that would hold a vector or SE3Pose per node 
 		//Possibly as a map<NodeLocation, SE3Pose> 
-		std::map<Vector3i, ORUtils::SE3Pose *> warp_field;
-
+		std::map<Vector3f, ORUtils::SE3Pose *> warp_field_XYZ;
+		std::map<Vector2f, ORUtils::SE3Pose *> warp_field_xy;
+		std::map<Vector3f, ORUtils::SE3Pose *> prev_warp_field_XYZ;
+		
 		/// Tracking quality: 1.0: success, 0.0: failure
 		enum TrackingResult
 		{

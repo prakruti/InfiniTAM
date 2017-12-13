@@ -14,6 +14,9 @@ _CPU_AND_GPU_CODE_ inline float computeUpdatedVoxelDepthInfo(DEVICEPTR(TVoxel) &
 	int oldW, newW;
 
 	// project point into image
+	//P_W_0*Warp_t*X_W0
+	//pt_camera = M_d * warp_t * pt_model;
+	
 	pt_camera = M_d * pt_model;
 	if (pt_camera.z <= 0) return -1;
 

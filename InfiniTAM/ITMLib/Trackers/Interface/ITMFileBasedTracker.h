@@ -18,7 +18,7 @@ namespace ITMLib
 	public:
 		bool CanKeepTracking() const;
 		void TrackCamera(ITMTrackingState *trackingState, const ITMView *view);
-
+		void EstimateWarpField(ITMTrackingState *trackingState, const ITMView *view);
 		bool requiresColourRendering() const { return false; }
 		bool requiresDepthReliability() const { return false; }
 		bool requiresPointCloudRendering() const { return false; }

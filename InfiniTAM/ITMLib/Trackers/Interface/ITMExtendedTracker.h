@@ -81,7 +81,7 @@ namespace ITMLib
 		int framesProcessed;
 
 		virtual int ComputeGandH_Depth(float &f, float *nabla, float *hessian, Matrix4f approxInvPose) = 0;
-		virtual int ComputeGandH_Depth_patch(float &f, float *nabla, float *hessian, Matrix4f approxInvPose, Matrix4f approxInvWarp, int start_x, int start_y, int patch_size_x, int patch_size_y)=0;
+		virtual int ComputeGandH_Depth_patch(float &f, float *nabla, float *hessian, Matrix4f approxInvPose, Matrix4f approxInvWarp, int start_x, int start_y, int patch_size_x, int patch_size_y, ITMTrackingState *trackingState) = 0;
 		virtual int ComputeGandH_RGB(float &f, float *nabla, float *hessian, Matrix4f approxPose) = 0;
 		virtual void ProjectCurrentIntensityFrame(ITMFloat4Image *points_out,
 												  ITMFloatImage *intensity_out,

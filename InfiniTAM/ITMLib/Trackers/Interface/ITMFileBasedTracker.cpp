@@ -18,6 +18,11 @@ bool ITMFileBasedTracker::CanKeepTracking() const
 	return poseFile.is_open();
 }
 
+void ITMFileBasedTracker::EstimateWarpField(ITMTrackingState *trackingState, const ITMView *view)
+{
+	return;
+}
+
 void ITMFileBasedTracker::TrackCamera(ITMTrackingState *trackingState, const ITMView *view)
 {
 	trackingState->trackerResult = ITMTrackingState::TRACKING_FAILED;

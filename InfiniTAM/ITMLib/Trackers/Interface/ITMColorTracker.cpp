@@ -47,6 +47,10 @@ void ITMColorTracker::TrackCamera(ITMTrackingState *trackingState, const ITMView
 	//	scene->pose->params.each.tx, scene->pose->params.each.ty, scene->pose->params.each.tz);
 }
 
+void ITMColorTracker::EstimateWarpField(ITMTrackingState *trackingState, const ITMView *view)
+{	
+	return;
+}
 void ITMColorTracker::PrepareForEvaluation(const ITMView *view)
 {
 	lowLevelEngine->CopyImage(viewHierarchy->GetLevel(0)->rgb, view->rgb);

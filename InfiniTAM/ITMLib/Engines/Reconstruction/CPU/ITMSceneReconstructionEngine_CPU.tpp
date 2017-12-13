@@ -87,6 +87,7 @@ void ITMSceneReconstructionEngine_CPU<TVoxel, ITMVoxelBlockHash>::IntegrateIntoS
 
 		if (currentHashEntry.ptr < 0) continue;
 
+		//World t = 0
 		globalPos.x = currentHashEntry.pos.x;
 		globalPos.y = currentHashEntry.pos.y;
 		globalPos.z = currentHashEntry.pos.z;
@@ -108,6 +109,7 @@ void ITMSceneReconstructionEngine_CPU<TVoxel, ITMVoxelBlockHash>::IntegrateIntoS
 			pt_model.z = (float)(globalPos.z + z) * voxelSize;
 			pt_model.w = 1.0f;
 
+			//TODO 3D Replace M_d with M_d * W for 3D warp
 			ComputeUpdatedVoxelInfo<TVoxel::hasColorInformation,TVoxel::hasConfidenceInformation, TVoxel>::compute(localVoxelBlock[locId], pt_model, M_d, 
 				projParams_d, M_rgb, projParams_rgb, mu, maxW, depth, confidence, depthImgSize, rgb, rgbImgSize);
 		}
@@ -169,6 +171,9 @@ void ITMSceneReconstructionEngine_CPU<TVoxel, ITMVoxelBlockHash>::AllocateSceneF
 	{
 		int y = locId / depthImgSize.x;
 		int x = locId - y * depthImgSize.x;
+
+		//trackingstate-warp_field[(x,y)] - warp
+		//TODO : invM_d = invW*invM_d
 		buildHashAllocAndVisibleTypePP(entriesAllocType, entriesVisibleType, x, y, blockCoords, depth, invM_d,
 			invProjParams_d, mu, depthImgSize, oneOverVoxelSize, hashTable, scene->sceneParams->viewFrustum_min,
 			scene->sceneParams->viewFrustum_max);
@@ -252,6 +257,8 @@ void ITMSceneReconstructionEngine_CPU<TVoxel, ITMVoxelBlockHash>::AllocateSceneF
 		if (hashVisibleType == 3)
 		{
 			bool isVisibleEnlarged, isVisible;
+			//TODO : M_d to M_d * W
+			//For a 3D point
 
 			if (useSwapping)
 			{

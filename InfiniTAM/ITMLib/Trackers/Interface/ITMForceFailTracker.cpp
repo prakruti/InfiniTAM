@@ -12,6 +12,11 @@ void ITMForceFailTracker::TrackCamera(ITMTrackingState *trackingState, const ITM
 	trackingState->trackerResult = ITMTrackingState::TRACKING_FAILED;
 }
 
+void ITMForceFailTracker::EstimateWarpField(ITMTrackingState *trackingState, const ITMView *view)
+{
+	return;
+}
+
 bool ITMForceFailTracker::requiresColourRendering() const
 {
 	return false;

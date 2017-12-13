@@ -75,6 +75,11 @@ namespace ITMLib
 			}
 		}
 
+		void EstimateWarpField(ITMTrackingState *trackingState, const ITMView *view)
+		{
+			return;
+		}
+		
 		void TrackCamera(ITMTrackingState *trackingState, const ITMView *view)
 		{
 			trackingState->trackerResult = ITMTrackingState::TRACKING_FAILED;
