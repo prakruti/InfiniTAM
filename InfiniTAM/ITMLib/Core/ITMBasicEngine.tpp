@@ -11,6 +11,7 @@
 
 #include "../../ORUtils/NVTimer.h"
 #include "../../ORUtils/FileUtils.h"
+#include <string> 
 
 //#define OUTPUT_TRAJECTORY_QUATERNIONS
 
@@ -244,6 +245,16 @@ static void QuaternionFromRotationMatrix(const double *matrix, double *q) {
 template <typename TVoxel, typename TIndex>
 ITMTrackingState::TrackingResult ITMBasicEngine<TVoxel,TIndex>::ProcessFrame(ITMUChar4Image *rgbImage, ITMShortImage *rawDepthImage, ITMIMUMeasurement *imuMeasurement)
 {
+	std::string dataset = sOutFolder;
+	if(framesProcessed%100==1)
+	{
+		printf("saving mesh for frame %d\n", framesProcessed-1);
+		std::string str = dataset + "mesh" + std::to_string(framesProcessed-1) + ".stl";
+		char * cstr = new char [str.length()+1];
+  		std::strcpy (cstr, str.c_str());
+		SaveSceneToMesh(cstr);
+	}
+
 	// prepare image and turn it into a depth image
 	if (imuMeasurement == NULL) viewBuilder->UpdateView(&view, rgbImage, rawDepthImage, settings->useBilateralFilter);
 	else viewBuilder->UpdateView(&view, rgbImage, rawDepthImage, settings->useBilateralFilter, imuMeasurement);

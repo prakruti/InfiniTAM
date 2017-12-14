@@ -49,6 +49,9 @@ namespace ITMLib
 		/// Pointer to the current camera pose and additional tracking information
 		ITMTrackingState *trackingState;
 
+		//Set output file for saving
+		std::string sOutFolder = "Users/prakrutigogia/";
+
 	public:
 		ITMView* GetView(void) { return view; }
 		ITMTrackingState* GetTrackingState(void) { return trackingState; }
@@ -60,6 +63,10 @@ namespace ITMLib
 
 		/// Extracts a mesh from the current scene and saves it to the model file specified by the file name
 		void SaveSceneToMesh(const char *fileName);
+		void SetOutFolder(std::string outputFolder)
+		{
+			sOutFolder = outputFolder;
+		}
 
 		/// save and load the full scene and relocaliser (if any) to/from file
 		void SaveToFile();

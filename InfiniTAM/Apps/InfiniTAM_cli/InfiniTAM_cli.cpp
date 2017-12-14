@@ -31,7 +31,7 @@ try
 		++arg;
 		if (argv[arg] != NULL) imagesource_part2 = argv[arg]; else break;
 		++arg;
-		if (argv[arg] != NULL) imagesource_part3 = argv[arg]; else break;
+		// if (argv[arg] != NULL) imagesource_part3 = argv[arg]; else break;
 	} while (false);
 
 	if (arg == 1) {
@@ -41,7 +41,7 @@ try
 		       "                  or two arguments specifying rgb and depth file masks\n"
 		       "\n"
 		       "examples:\n"
-		       "  %s ./Files/Teddy/calib.txt ./Files/Teddy/Frames/%%04i.ppm ./Files/Teddy/Frames/%%04i.pgm\n"
+		       "  %s ./Files/Teddy/calib.txt ./Files/Teddy/Frames/%%04i.ppm ./Files/Teddy/Frames/%%04i.pgm <folder_to_save_meshes>\n"
 		       "  %s ./Files/Teddy/calib.txt\n\n", argv[0], argv[0], argv[0]);
 	}
 
@@ -81,6 +81,11 @@ try
 		internalSettings, imageSource->getCalib(), imageSource->getRGBImageSize(), imageSource->getDepthImageSize()
 	);
 
+	//cast to basic
+	ITMBasicEngine<ITMVoxel,ITMVoxelIndex> * basic = dynamic_cast<ITMBasicEngine<ITMVoxel,ITMVoxelIndex> *>(mainEngine);
+	//set output folder
+
+	basic->SetOutFolder(argv[4]);
 	CLIEngine::Instance()->Initialise(imageSource, imuSource, mainEngine, internalSettings->deviceType);
 	CLIEngine::Instance()->Run();
 	CLIEngine::Instance()->Shutdown();
