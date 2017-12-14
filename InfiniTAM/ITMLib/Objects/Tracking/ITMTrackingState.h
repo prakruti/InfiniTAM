@@ -82,7 +82,7 @@ namespace ITMLib
 		}
 
 		
-		void Interpolate3DWarp(std::map<Vector3f, ORUtils::SE3Pose> map_nodes, Vector3f world_coord)
+		 ORUtils::SE3Pose Interpolate3DWarp(std::map<Vector3f, ORUtils::SE3Pose> map_nodes, Vector3f world_coord)
 		{
 		// min_dist : gives the set of three distances which are neares nodes 
 		//poses: gives the set of  poses for the three nearest nodes
@@ -95,6 +95,7 @@ namespace ITMLib
 			Vector3f temp;
 			ORUtils::SE3Pose temp_se3;
 			float difference;
+			ORUtils::SE3Pose final_warp;
 
 			int i=0;
 			// run the for loop for all the nodes 
@@ -222,8 +223,11 @@ namespace ITMLib
 				//addition
 				//normalization
 
+				final_warp = dq_dquat_to_se3(dual_quat_average);
+
 				i++;
 			} 
+			return final_warp; 
 
 		}
 
