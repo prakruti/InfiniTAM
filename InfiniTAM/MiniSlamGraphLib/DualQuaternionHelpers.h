@@ -1,18 +1,20 @@
 #define DQ_PRECISION    1e-10 
 
+#include "../ORUtils/SE3Pose.h"
+
+
 typedef double dq_t[8];
 
 
-
 // Convert SE3 to dual quaternion
-dq_t dq_se3_to_dquat(const ORUtils::SE3Pose in_SE3)
+void dq_se3_to_dquat(dq_t &O, const ORUtils::SE3Pose in_SE3);
 
 // Convert dual quaternion to SE3
-ORUtils::SE3Pose dq_dquat_to_se3(const dq_t Q )
+ORUtils::SE3Pose dq_dquat_to_se3(const dq_t Q );
 
 // some functions on dual quaternions
 void dq_op_norm2(double *real, double *dual, const dq_t Q );
-dq_t  dq_op_add(const dq_t P, const dq_t Q );
+void  dq_op_add( dq_t O , const dq_t P, const dq_t Q );
 
 // helper functions needed from SE3->DQuat
 void dq_op_mul( dq_t PQ, const dq_t P, const dq_t Q ) ;

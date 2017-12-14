@@ -218,9 +218,9 @@ void dq_op_mul( dq_t PQ, const dq_t P, const dq_t Q )
 
 
 
-dq_t dq_se3_to_dquat(  const ORUtils::SE3Pose in_SE3)
+void dq_se3_to_dquat( dq_t &O, const ORUtils::SE3Pose in_SE3)
 {
-   dq_t O;  
+    
    dq_t QR, QT;
    Matrix3<float> R1 = in_SE3.GetR();
    Vector3<float> t1 = in_SE3.GetT();
@@ -245,7 +245,7 @@ dq_t dq_se3_to_dquat(  const ORUtils::SE3Pose in_SE3)
    dq_cr_rotation_matrix( QR, R );
    dq_cr_translation_vector( QT, t );
    dq_op_mul( O, QT, QR );
-   return O;
+   
 }
 
 
@@ -307,13 +307,13 @@ ORUtils::SE3Pose dq_dquat_to_se3(const dq_t Q )
 }
 
 
-dq_t dq_op_add(  const dq_t P, const dq_t Q )
+void dq_op_add( dq_t O , const dq_t P, const dq_t Q )
 {
-   dq_t O;
+   
    int i;
    for (i=0; i<8; i++)
       O[i] = P[i] + Q[i];
-    return O ;
+    
 }
 
 void dq_op_norm2( double *real, double *dual, const dq_t Q )
